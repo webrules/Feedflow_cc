@@ -1,0 +1,22 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(where:*)",
+      "Bash(test:*)",
+      "Bash(java:*)",
+      "Bash(echo:*)",
+      "Bash(gradle wrapper:*)",
+      "Bash(chmod:*)",
+      "Bash(./gradlew assembleDebug:*)",
+      "Bash(\"D:/Projets/Feedflow_cc/app/proguard-rules.pro\" << 'EOF'\n# Add project specific ProGuard rules here.\n\n# Keep Kotlin serialization\n-keepattributes *Annotation*, InnerClasses\n-dontnote kotlinx.serialization.AnnotationsKt\n\n-keepclassmembers class kotlinx.serialization.json.** {\n    *** Companion;\n}\n-keepclasseswithmembers class kotlinx.serialization.json.** {\n    kotlinx.serialization.KSerializer serializer\\(...\\);\n}\n-keep,includedescriptorclasses class com.feedflow.**$serializer { *; }\n-keepclassmembers class com.feedflow.** {\n    *** Companion;\n}\n-keepclasseswithmembers class com.feedflow.** {\n    kotlinx.serialization.KSerializer serializer\\(...\\);\n}\n\n# Retrofit\n-keepattributes Signature, InnerClasses, EnclosingMethod\n-keepattributes RuntimeVisibleAnnotations, RuntimeVisibleParameterAnnotations\n-keepclassmembers,allowshrinking,allowobfuscation interface * {\n    @retrofit2.http.* <methods>;\n}\n-dontwarn org.codehaus.mojo.animal_sniffer.IgnoreJRERequirement\n-dontwarn javax.annotation.**\n-dontwarn kotlin.Unit\n-dontwarn retrofit2.KotlinExtensions\n-dontwarn retrofit2.KotlinExtensions$*\n\n# OkHttp\n-dontwarn okhttp3.**\n-dontwarn okio.**\n\n# Gson\n-keepattributes Signature\n-keep class com.feedflow.data.remote.dto.** { *; }\n\n# Room\n-keep class * extends androidx.room.RoomDatabase\n-dontwarn androidx.room.paging.**\n\n# Jsoup\n-keeppackagenames org.jsoup.nodes\n\n# Google Generative AI\n-keep class com.google.ai.client.generativeai.** { *; }\n-dontwarn com.google.ai.client.generativeai.**\nEOF)",
+      "Bash(.\\\\gradlew.bat assembleDebug:*)",
+      "Bash(cmd /c:*)",
+      "Bash(bash -c:*)",
+      "WebFetch(domain:www.4d4y.com)",
+      "Bash(.\\\\gradlew assembleDebug:*)",
+      "Bash(gradlew.bat assembleDebug:*)",
+      "Bash(D:/Projets/Feedflow_cc/gradlew.bat assembleDebug:*)",
+      "Bash(cmd.exe /c:*)"
+    ]
+  }
+}
