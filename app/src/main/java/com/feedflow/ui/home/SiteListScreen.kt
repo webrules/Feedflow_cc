@@ -3,17 +3,18 @@ package com.feedflow.ui.home
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.lazy.grid.GridCells
-import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
-import androidx.compose.foundation.lazy.grid.items
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.AutoAwesome
 import androidx.compose.material.icons.filled.Bookmark
 import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.filled.Settings
@@ -41,13 +42,14 @@ import com.feedflow.R
 import com.feedflow.data.model.ForumSite
 import com.feedflow.ui.settings.SettingsViewModel
 
-@OptIn(ExperimentalMaterial3Api::class)
+@OptIn(ExperimentalMaterial3Api::class, ExperimentalLayoutApi::class)
 @Composable
 fun SiteListScreen(
     onSiteClick: (ForumSite) -> Unit,
     onSettingsClick: () -> Unit,
     onBookmarksClick: () -> Unit,
     onLoginClick: () -> Unit,
+    onCoverClick: () -> Unit,
     settingsViewModel: SettingsViewModel = hiltViewModel(),
     siteListViewModel: SiteListViewModel = hiltViewModel()
 ) {
@@ -63,30 +65,10 @@ fun SiteListScreen(
                     containerColor = MaterialTheme.colorScheme.background
                 ),
                 actions = {
-                    IconButton(onClick = { settingsViewModel.toggleDarkMode() }) {
+                    IconButton(onClick = onCoverClick) {
                         Icon(
-                            painter = painterResource(
-                                if (isDarkMode) R.drawable.ic_dark_mode else R.drawable.ic_light_mode
-                            ),
-                            contentDescription = stringResource(R.string.dark_mode)
-                        )
-                    }
-                    IconButton(onClick = { settingsViewModel.toggleLanguage() }) {
-                        Text(
-                            text = if (language == "en") "EN" else "中",
-                            style = MaterialTheme.typography.labelLarge
-                        )
-                    }
-                    IconButton(onClick = onSettingsClick) {
-                        Icon(
-                            Icons.Default.Settings,
-                            contentDescription = stringResource(R.string.settings)
-                        )
-                    }
-                    IconButton(onClick = onLoginClick) {
-                        Icon(
-                            Icons.Default.Person,
-                            contentDescription = stringResource(R.string.login)
+                            Icons.Default.AutoAwesome,
+                            contentDescription = stringResource(R.string.ai_summary_toggle)
                         )
                     }
                     IconButton(onClick = onBookmarksClick) {
@@ -95,25 +77,67 @@ fun SiteListScreen(
                             contentDescription = stringResource(R.string.bookmarks)
                         )
                     }
+                    IconButton(onClick = { settingsViewModel.toggleLanguage() }) {
+                        Text(
+                            text = if (language == "en") "EN" else "\u4E2D",
+                            style = MaterialTheme.typography.labelLarge
+                        )
+                    }
+                    IconButton(onClick = { settingsViewModel.toggleDarkMode() }) {
+                        Icon(
+                            painter = painterResource(
+                                if (isDarkMode) R.drawable.ic_dark_mode else R.drawable.ic_light_mode
+                            ),
+                            contentDescription = stringResource(R.string.dark_mode)
+                        )
+                    }
+                    IconButton(onClick = onLoginClick) {
+                        Icon(
+                            Icons.Default.Person,
+                            contentDescription = stringResource(R.string.login)
+                        )
+                    }
+                    IconButton(onClick = onSettingsClick) {
+                        Icon(
+                            Icons.Default.Settings,
+                            contentDescription = stringResource(R.string.settings)
+                        )
+                    }
                 }
             )
         }
     ) { paddingValues ->
-        LazyVerticalGrid(
-            columns = GridCells.Fixed(2),
+        Column(
             modifier = Modifier
                 .fillMaxSize()
-                .padding(paddingValues),
-            contentPadding = PaddingValues(16.dp),
-            horizontalArrangement = Arrangement.spacedBy(16.dp),
-            verticalArrangement = Arrangement.spacedBy(16.dp)
+                .padding(paddingValues)
+                .verticalScroll(rememberScrollState())
         ) {
-            items(sites) { site ->
-                SiteCard(
-                    site = site,
-                    onClick = { onSiteClick(site) }
-                )
-            }
+            SiteGrid(sites = sites, onSiteClick = onSiteClick)
+        }
+    }
+}
+
+@OptIn(ExperimentalLayoutApi::class)
+@Composable
+private fun SiteGrid(
+    sites: List<ForumSite>,
+    onSiteClick: (ForumSite) -> Unit
+) {
+    FlowRow(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(16.dp),
+        maxItemsInEachRow = 2,
+        horizontalArrangement = Arrangement.spacedBy(16.dp),
+        verticalArrangement = Arrangement.spacedBy(16.dp)
+    ) {
+        sites.forEach { site ->
+            SiteCard(
+                site = site,
+                onClick = { onSiteClick(site) },
+                modifier = Modifier.weight(1f)
+            )
         }
     }
 }
@@ -121,11 +145,11 @@ fun SiteListScreen(
 @Composable
 private fun SiteCard(
     site: ForumSite,
-    onClick: () -> Unit
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier
 ) {
     Card(
-        modifier = Modifier
-            .fillMaxWidth()
+        modifier = modifier
             .height(120.dp)
             .clickable(onClick = onClick),
         colors = CardDefaults.cardColors(

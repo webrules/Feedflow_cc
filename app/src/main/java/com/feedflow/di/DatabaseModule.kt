@@ -7,6 +7,7 @@ import com.feedflow.data.local.db.dao.AiSummaryDao
 import com.feedflow.data.local.db.dao.BookmarkDao
 import com.feedflow.data.local.db.dao.CacheDao
 import com.feedflow.data.local.db.dao.CommunityDao
+import com.feedflow.data.local.db.dao.CoverSummaryDao
 import com.feedflow.data.local.db.dao.SettingsDao
 import dagger.Module
 import dagger.Provides
@@ -27,6 +28,7 @@ object DatabaseModule {
             FeedflowDatabase::class.java,
             FeedflowDatabase.DATABASE_NAME
         )
+            .addMigrations(FeedflowDatabase.MIGRATION_1_2)
             .fallbackToDestructiveMigration()
             .build()
     }
@@ -54,5 +56,10 @@ object DatabaseModule {
     @Provides
     fun provideBookmarkDao(database: FeedflowDatabase): BookmarkDao {
         return database.bookmarkDao()
+    }
+
+    @Provides
+    fun provideCoverSummaryDao(database: FeedflowDatabase): CoverSummaryDao {
+        return database.coverSummaryDao()
     }
 }

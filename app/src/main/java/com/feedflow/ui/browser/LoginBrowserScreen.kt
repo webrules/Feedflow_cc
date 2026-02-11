@@ -39,6 +39,7 @@ fun LoginBrowserScreen(
     siteId: String,
     url: String,
     onBackClick: () -> Unit,
+    onLoginSuccess: (String) -> Unit = {},
     viewModel: LoginBrowserViewModel = hiltViewModel()
 ) {
     var isLoading by remember { mutableStateOf(true) }
@@ -109,6 +110,7 @@ fun LoginBrowserScreen(
                                         android.util.Log.d("LoginBrowser", "Saved ${cookies.size} cookies for $siteId: ${cookies.take(3)}")
                                         scope.launch {
                                             snackbarHostState.showSnackbar("Login successful!")
+                                            onLoginSuccess(siteId)
                                         }
                                     }
                                 }

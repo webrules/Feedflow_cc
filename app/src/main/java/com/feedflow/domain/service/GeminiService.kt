@@ -25,11 +25,11 @@ class GeminiService @Inject constructor(
         if (apiKey != currentApiKey) {
             currentApiKey = apiKey
             model = GenerativeModel(
-                modelName = "gemini-pro",
+                modelName = "gemini-2.5-flash",
                 apiKey = apiKey,
                 generationConfig = generationConfig {
                     temperature = 0.7f
-                    maxOutputTokens = 1024
+                    maxOutputTokens = 2048
                 }
             )
         }
@@ -85,6 +85,29 @@ class GeminiService @Inject constructor(
 
         val response = generativeModel.generateContent(prompt)
         return response.text ?: throw Exception("Failed to generate daily summary")
+    }
+
+    suspend fun generateSiteSummary(
+        siteName: String,
+        posts: List<Pair<String, String>>
+    ): String {
+        val generativeModel = getModel()
+            ?: throw Exception("Gemini API key not configured. Please set your API key in Settings.")
+
+        val formatted = posts.joinToString("\n") { (title, stats) -> "- $title ($stats)" }
+
+        val prompt = """
+            You are a tech news editor. Summarize the hottest discussions on $siteName in 3-5 sentences.
+            Write in both English and Chinese (中文).
+            Use "---EN---" before the English section and "---CN---" before the Chinese section.
+            Be concise. No titles or headers needed, just the summary text.
+
+            $siteName (${posts.size} posts):
+            $formatted
+        """.trimIndent()
+
+        val response = generativeModel.generateContent(prompt)
+        return response.text ?: throw Exception("Failed to generate summary for $siteName")
     }
 
     suspend fun isConfigured(): Boolean {

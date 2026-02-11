@@ -148,4 +148,19 @@
     <string name="offline">Offline</string>
     <string name="cached_content">Cached content</string>
     <string name="fresh_content">Fresh content</string>
+
+    <!-- AI Summary -->
+    <string name="ai_summary_toggle">AI Summary</string>
+    <string name="cover_loading">Fetching hot discussions…</string>
+    <string name="cover_expand_section">Expand section</string>
+    <string name="cover_collapse_section">Collapse section</string>
+    <string name="cover_page_title">AI Summary</string>
+    <string name="browse_forums">Browse Forums</string>
+
+    <!-- Cache -->
+    <string name="cache_section">Cache</string>
+    <string name="clear_cache">Clear Old Cache</string>
+    <string name="clear_cache_description">Remove cached AI summaries older than one week</string>
+    <string name="cache_cleared">Old cache cleared</string>
+    <string name="cache_clear_failed">Failed to clear cache</string>
 </resources>

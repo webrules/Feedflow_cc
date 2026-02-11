@@ -11,6 +11,7 @@ import com.feedflow.ui.bookmarks.BookmarksScreen
 import com.feedflow.ui.browser.InAppBrowserScreen
 import com.feedflow.ui.browser.LoginBrowserScreen
 import com.feedflow.ui.communities.CommunitiesScreen
+import com.feedflow.ui.cover.CoverScreen
 import com.feedflow.ui.detail.ThreadDetailScreen
 import com.feedflow.ui.home.SiteListScreen
 import com.feedflow.ui.image.FullScreenImageScreen
@@ -40,6 +41,18 @@ fun NavGraph(
                 },
                 onLoginClick = {
                     navController.navigate(Screen.Login.route)
+                },
+                onCoverClick = {
+                    navController.navigate(Screen.Cover.route)
+                }
+            )
+        }
+
+        composable(Screen.Cover.route) {
+            CoverScreen(
+                onBackClick = { navController.popBackStack() },
+                onThreadClick = { siteId, threadId ->
+                    navController.navigate(Screen.ThreadDetail.createRoute(siteId, threadId))
                 }
             )
         }
@@ -144,7 +157,11 @@ fun NavGraph(
             LoginBrowserScreen(
                 siteId = siteId,
                 url = url,
-                onBackClick = { navController.popBackStack() }
+                onBackClick = { navController.popBackStack() },
+                onLoginSuccess = { loggedInSiteId ->
+                    navController.popBackStack(Screen.Home.route, false)
+                    navController.navigate(Screen.Communities.createRoute(loggedInSiteId))
+                }
             )
         }
 

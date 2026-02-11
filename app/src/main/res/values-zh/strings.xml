@@ -148,4 +148,19 @@
     <string name="offline">离线</string>
     <string name="cached_content">缓存内容</string>
     <string name="fresh_content">最新内容</string>
+
+    <!-- AI Summary -->
+    <string name="ai_summary_toggle">AI 摘要</string>
+    <string name="cover_loading">正在获取热门讨论…</string>
+    <string name="cover_expand_section">展开</string>
+    <string name="cover_collapse_section">收起</string>
+    <string name="cover_page_title">AI 摘要</string>
+    <string name="browse_forums">浏览论坛</string>
+
+    <!-- Cache -->
+    <string name="cache_section">缓存</string>
+    <string name="clear_cache">清除旧缓存</string>
+    <string name="clear_cache_description">删除一周前的 AI 摘要缓存</string>
+    <string name="cache_cleared">旧缓存已清除</string>
+    <string name="cache_clear_failed">清除缓存失败</string>
 </resources>

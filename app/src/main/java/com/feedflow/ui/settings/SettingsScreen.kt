@@ -18,13 +18,17 @@ import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.SnackbarHost
+import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -49,8 +53,27 @@ fun SettingsScreen(
     val language by viewModel.language.collectAsState()
     val geminiApiKey by viewModel.geminiApiKey.collectAsState()
     val enabledSites by viewModel.enabledSites.collectAsState()
+    val cacheClearResult by viewModel.cacheClearResult.collectAsState()
 
     var apiKeyInput by remember(geminiApiKey) { mutableStateOf(geminiApiKey ?: "") }
+    val snackbarHostState = remember { SnackbarHostState() }
+
+    val cacheCleared = stringResource(R.string.cache_cleared)
+    val cacheClearFailed = stringResource(R.string.cache_clear_failed)
+
+    LaunchedEffect(cacheClearResult) {
+        when (cacheClearResult) {
+            "done" -> {
+                snackbarHostState.showSnackbar(cacheCleared)
+                viewModel.dismissCacheClearResult()
+            }
+            "error" -> {
+                snackbarHostState.showSnackbar(cacheClearFailed)
+                viewModel.dismissCacheClearResult()
+            }
+            else -> {}
+        }
+    }
 
     Scaffold(
         topBar = {
@@ -65,7 +88,8 @@ fun SettingsScreen(
                     containerColor = MaterialTheme.colorScheme.background
                 )
             )
-        }
+        },
+        snackbarHost = { SnackbarHost(snackbarHostState) }
     ) { paddingValues ->
         Column(
             modifier = Modifier
@@ -158,6 +182,28 @@ fun SettingsScreen(
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant
             )
+
+            Spacer(modifier = Modifier.height(24.dp))
+
+            // Clear Cache
+            Text(
+                text = stringResource(R.string.cache_section),
+                style = MaterialTheme.typography.titleMedium
+            )
+
+            Spacer(modifier = Modifier.height(8.dp))
+
+            Text(
+                text = stringResource(R.string.clear_cache_description),
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+
+            Spacer(modifier = Modifier.height(8.dp))
+
+            OutlinedButton(onClick = { viewModel.clearOldCache() }) {
+                Text(stringResource(R.string.clear_cache))
+            }
         }
     }
 }

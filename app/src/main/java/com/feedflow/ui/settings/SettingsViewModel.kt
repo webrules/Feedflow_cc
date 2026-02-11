@@ -4,9 +4,12 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.feedflow.data.local.preferences.PreferencesManager
 import com.feedflow.data.model.ForumSite
+import com.feedflow.data.repository.CoverRepository
 import dagger.hilt.android.lifecycle.HiltViewModel
+import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
@@ -14,7 +17,8 @@ import javax.inject.Inject
 
 @HiltViewModel
 class SettingsViewModel @Inject constructor(
-    private val preferencesManager: PreferencesManager
+    private val preferencesManager: PreferencesManager,
+    private val coverRepository: CoverRepository
 ) : ViewModel() {
 
     companion object {
@@ -45,6 +49,24 @@ class SettingsViewModel @Inject constructor(
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), ALL_OPTIONAL_IDS)
 
     val optionalSites: List<ForumSite> = OPTIONAL_SITES
+
+    private val _cacheClearResult = MutableStateFlow<String?>(null)
+    val cacheClearResult: StateFlow<String?> = _cacheClearResult.asStateFlow()
+
+    fun clearOldCache() {
+        viewModelScope.launch {
+            try {
+                coverRepository.deleteOlderThanOneWeek()
+                _cacheClearResult.value = "done"
+            } catch (e: Exception) {
+                _cacheClearResult.value = "error"
+            }
+        }
+    }
+
+    fun dismissCacheClearResult() {
+        _cacheClearResult.value = null
+    }
 
     fun toggleSite(siteId: String) {
         viewModelScope.launch {

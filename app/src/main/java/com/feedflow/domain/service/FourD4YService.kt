@@ -118,6 +118,53 @@ class FourD4YService @Inject constructor(
         throw UnsupportedOperationException("Thread creation not yet implemented")
     }
 
+    suspend fun fetchRecentThreads(fid: String = "2"): List<ForumThread> = withContext(Dispatchers.IO) {
+        val allThreads = mutableListOf<ForumThread>()
+        val community = Community(fid, "Forum", "", id)
+
+        // Fetch page 1 first to determine total page count
+        val sidParam = sessionId?.let { "&sid=$it" } ?: ""
+        val firstUrl = "$baseUrl/forumdisplay.php?fid=$fid$sidParam&orderby=lastpost&filter=86400&page=1"
+        val firstRequest = buildRequest(firstUrl)
+        val firstResponse = client.newCall(firstRequest).execute()
+        val firstBytes = firstResponse.body?.bytes() ?: return@withContext emptyList()
+        val firstHtml = GBKUtils.smartDecode(firstBytes)
+
+        extractSessionId(firstHtml)
+        allThreads.addAll(parseThreadList(firstHtml, community))
+
+        // Dynamically extract total page count from pagination HTML
+        val pagesDoc = Jsoup.parse(firstHtml)
+        val pagesDiv = pagesDoc.selectFirst("div.pages")
+        val maxPage = if (pagesDiv != null) {
+            val pageNums = Regex("""page=(\d+)""").findAll(pagesDiv.html())
+                .mapNotNull { it.groupValues[1].toIntOrNull() }
+                .toList()
+            pageNums.maxOrNull() ?: 1
+        } else {
+            1
+        }
+
+        // Fetch remaining pages
+        for (page in 2..maxPage) {
+            try {
+                val sidParam2 = sessionId?.let { "&sid=$it" } ?: ""
+                val url = "$baseUrl/forumdisplay.php?fid=$fid$sidParam2&orderby=lastpost&filter=86400&page=$page"
+                val request = buildRequest(url)
+                val response = client.newCall(request).execute()
+                val bytes = response.body?.bytes() ?: continue
+                val html = GBKUtils.smartDecode(bytes)
+                extractSessionId(html)
+                allThreads.addAll(parseThreadList(html, community))
+            } catch (e: Exception) {
+                android.util.Log.e("4D4Y", "Error fetching page $page", e)
+            }
+        }
+
+        android.util.Log.d("4D4Y", "fetchRecentThreads: ${allThreads.size} threads from $maxPage pages")
+        allThreads
+    }
+
     override fun getWebURL(thread: ForumThread): String {
         return "$baseUrl/viewthread.php?tid=${thread.id}"
     }

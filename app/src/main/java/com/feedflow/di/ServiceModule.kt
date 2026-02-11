@@ -50,19 +50,31 @@ object ServiceModule {
 
     @Provides
     @Singleton
-    @Named("V2EX")
-    fun provideV2EXService(
+    fun provideV2EXServiceConcrete(
         client: OkHttpClient,
         encryptionHelper: EncryptionHelper
-    ): ForumService = V2EXService(client, encryptionHelper)
+    ): V2EXService = V2EXService(client, encryptionHelper)
+
+    @Provides
+    @Singleton
+    @Named("V2EX")
+    fun provideV2EXForumService(
+        service: V2EXService
+    ): ForumService = service
+
+    @Provides
+    @Singleton
+    fun provideFourD4YServiceConcrete(
+        client: OkHttpClient,
+        encryptionHelper: EncryptionHelper
+    ): FourD4YService = FourD4YService(client, encryptionHelper)
 
     @Provides
     @Singleton
     @Named("4D4Y")
-    fun provideFourD4YService(
-        client: OkHttpClient,
-        encryptionHelper: EncryptionHelper
-    ): ForumService = FourD4YService(client, encryptionHelper)
+    fun provideFourD4YForumService(
+        service: FourD4YService
+    ): ForumService = service
 
     @Provides
     @Singleton
