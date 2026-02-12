@@ -133,6 +133,7 @@
     <string name="forum_v2ex">V2EX</string>
     <string name="forum_linuxdo">Linux.do</string>
     <string name="forum_zhihu">Zhihu</string>
+    <string name="forum_nodeseek">NodeSeek</string>
 
     <!-- Errors -->
     <string name="error_network">Network error. Please check your connection.</string>

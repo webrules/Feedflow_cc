@@ -45,6 +45,12 @@ enum class ForumSite(
         displayNameRes = R.string.forum_zhihu,
         iconRes = R.drawable.ic_zhihu,
         baseUrl = "https://www.zhihu.com"
+    ),
+    NODE_SEEK(
+        id = "nodeseek",
+        displayNameRes = R.string.forum_nodeseek,
+        iconRes = R.drawable.ic_nodeseek,
+        baseUrl = "https://www.nodeseek.com"
     );
 
     companion object {

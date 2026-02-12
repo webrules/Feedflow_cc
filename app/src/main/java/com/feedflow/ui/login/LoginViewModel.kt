@@ -83,6 +83,7 @@ class LoginViewModel @Inject constructor(
             ForumSite.LINUX_DO -> "${site.baseUrl}/login"
             ForumSite.FOUR_D4Y -> "${site.baseUrl}/logging.php?action=login"
             ForumSite.ZHIHU -> "${site.baseUrl}/signin"
+            ForumSite.NODE_SEEK -> "${site.baseUrl}/signIn"
             else -> site.baseUrl
         }
     }
