@@ -12,17 +12,21 @@ import javax.inject.Singleton
 class EncryptionHelper @Inject constructor(
     @ApplicationContext private val context: Context
 ) {
-    private val masterKey = MasterKey.Builder(context)
-        .setKeyScheme(MasterKey.KeyScheme.AES256_GCM)
-        .build()
+    private val masterKey by lazy {
+        MasterKey.Builder(context)
+            .setKeyScheme(MasterKey.KeyScheme.AES256_GCM)
+            .build()
+    }
 
-    private val encryptedPrefs = EncryptedSharedPreferences.create(
-        context,
-        ENCRYPTED_PREFS_NAME,
-        masterKey,
-        EncryptedSharedPreferences.PrefKeyEncryptionScheme.AES256_SIV,
-        EncryptedSharedPreferences.PrefValueEncryptionScheme.AES256_GCM
-    )
+    private val encryptedPrefs by lazy {
+        EncryptedSharedPreferences.create(
+            context,
+            ENCRYPTED_PREFS_NAME,
+            masterKey,
+            EncryptedSharedPreferences.PrefKeyEncryptionScheme.AES256_SIV,
+            EncryptedSharedPreferences.PrefValueEncryptionScheme.AES256_GCM
+        )
+    }
 
     fun encrypt(plainText: String): String {
         // Store in encrypted prefs with a unique key, return base64 encoded
