@@ -26,7 +26,9 @@ class SiteListViewModel @Inject constructor(
         ForumSite.FOUR_D4Y,
         ForumSite.V2EX,
         ForumSite.LINUX_DO,
-        ForumSite.ZHIHU
+        ForumSite.ZHIHU,
+        ForumSite.NODE_SEEK,
+        ForumSite.TWO_LIBRA
     ).map { it.id }.toSet()
 
     val sites: StateFlow<List<ForumSite>> = preferencesManager.communityVisibility

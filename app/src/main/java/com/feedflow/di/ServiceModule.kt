@@ -11,6 +11,8 @@ import com.feedflow.domain.service.FourD4YService
 import com.feedflow.domain.service.GeminiService
 import com.feedflow.domain.service.HackerNewsService
 import com.feedflow.domain.service.RSSService
+import com.feedflow.domain.service.NodeSeekService
+import com.feedflow.domain.service.TwoLibraService
 import com.feedflow.domain.service.V2EXService
 import com.feedflow.domain.service.ZhihuService
 import dagger.Module
@@ -78,6 +80,34 @@ object ServiceModule {
 
     @Provides
     @Singleton
+    fun provideNodeSeekServiceConcrete(
+        client: OkHttpClient,
+        encryptionHelper: EncryptionHelper
+    ): NodeSeekService = NodeSeekService(client, encryptionHelper)
+
+    @Provides
+    @Singleton
+    @Named("NodeSeek")
+    fun provideNodeSeekForumService(
+        service: NodeSeekService
+    ): ForumService = service
+
+    @Provides
+    @Singleton
+    fun provideTwoLibraServiceConcrete(
+        client: OkHttpClient,
+        encryptionHelper: EncryptionHelper
+    ): TwoLibraService = TwoLibraService(client, encryptionHelper)
+
+    @Provides
+    @Singleton
+    @Named("2Libra")
+    fun provideTwoLibraForumService(
+        service: TwoLibraService
+    ): ForumService = service
+
+    @Provides
+    @Singleton
     @Named("Zhihu")
     fun provideZhihuService(
         client: OkHttpClient,
@@ -99,13 +129,17 @@ object ServiceModule {
         @Named("Discourse") discourseService: ForumService,
         @Named("V2EX") v2exService: ForumService,
         @Named("4D4Y") fourD4YService: ForumService,
-        @Named("Zhihu") zhihuService: ForumService
+        @Named("Zhihu") zhihuService: ForumService,
+        @Named("NodeSeek") nodeSeekService: ForumService,
+        @Named("2Libra") twoLibraService: ForumService
     ): Map<String, ForumService> = mapOf(
         "rss" to rssService,
         "hackernews" to hackerNewsService,
         "linux_do" to discourseService,
         "v2ex" to v2exService,
         "4d4y" to fourD4YService,
-        "zhihu" to zhihuService
+        "zhihu" to zhihuService,
+        "nodeseek" to nodeSeekService,
+        "2libra" to twoLibraService
     )
 }
