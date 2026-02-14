@@ -36,15 +36,11 @@ class RSSParser @Inject constructor() {
             var currentAuthor = ""
             var currentGuid = ""
 
-            // Track element stack for nested elements like <author><name>
-            val elementStack = mutableListOf<String>()
-
             while (eventType != XmlPullParser.END_DOCUMENT) {
                 when (eventType) {
                     XmlPullParser.START_TAG -> {
                         val localName = parser.name.lowercase()
                         val namespace = parser.namespace ?: ""
-                        elementStack.add(localName)
 
                         when {
                             localName == "item" -> {
@@ -122,10 +118,6 @@ class RSSParser @Inject constructor() {
 
                         if (localName == "author") {
                             inAuthor = false
-                        }
-
-                        if (elementStack.isNotEmpty()) {
-                            elementStack.removeAt(elementStack.lastIndex)
                         }
 
                         if ((localName == "item" && inItem) || (localName == "entry" && inEntry)) {

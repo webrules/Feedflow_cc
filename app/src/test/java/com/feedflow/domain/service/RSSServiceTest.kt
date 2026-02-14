@@ -16,12 +16,15 @@ import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Before
 import org.junit.Test
+import org.junit.runner.RunWith
+import androidx.test.ext.junit.runners.AndroidJUnit4
 import org.mockito.kotlin.any
 import org.mockito.kotlin.mock
 import org.mockito.kotlin.whenever
 import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
 
+@RunWith(AndroidJUnit4::class)
 class RSSServiceTest {
 
     private lateinit var mockWebServer: MockWebServer
