@@ -1,14 +1,14 @@
 package com.feedflow.domain.service
 
+import android.util.LruCache
+import android.util.Log
 import com.feedflow.R
 import com.feedflow.data.local.preferences.PreferencesManager
-import com.feedflow.data.model.Comment
 import com.feedflow.data.model.Community
-import com.feedflow.data.model.FeedInfo
 import com.feedflow.data.model.DefaultFeeds
+import com.feedflow.data.model.FeedInfo
 import com.feedflow.data.model.ForumThread
 import com.feedflow.data.model.ThreadDetailResult
-import com.feedflow.data.model.User
 import com.feedflow.domain.parser.RSSParser
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.first
@@ -32,7 +32,13 @@ class RSSService @Inject constructor(
     override val logo: Int = R.drawable.ic_rss
 
     private val json = Json { ignoreUnknownKeys = true }
-    private val threadCache = mutableMapOf<String, ForumThread>()
+
+    // Cache up to 100 threads to prevent memory leaks and improve performance
+    private val threadCache = LruCache<String, ForumThread>(100)
+
+    private var lastCustomFeedsJson: String? = null
+    private var lastParsedCustomFeeds: List<FeedInfo> = emptyList()
+    private val feedsLock = Any()
 
     override suspend fun fetchCategories(): List<Community> {
         val feeds = getFeeds()
@@ -71,17 +77,18 @@ class RSSService @Inject constructor(
 
             // Cache threads for detail view
             threads.forEach { thread ->
-                threadCache[thread.id] = thread
+                threadCache.put(thread.id, thread)
             }
 
             threads
         } catch (e: Exception) {
+            Log.e(TAG, "Error fetching threads for category $categoryId", e)
             emptyList()
         }
     }
 
     override suspend fun fetchThreadDetail(threadId: String, page: Int): ThreadDetailResult {
-        val thread = threadCache[threadId]
+        val thread = threadCache.get(threadId)
             ?: throw Exception("Thread not found in cache. Please refresh the feed.")
 
         return ThreadDetailResult(
@@ -104,17 +111,27 @@ class RSSService @Inject constructor(
     // Feed Management
     suspend fun getFeeds(): List<FeedInfo> {
         val customFeedsJson = preferencesManager.customRssFeeds.first()
-        val customFeeds = if (!customFeedsJson.isNullOrBlank()) {
-            try {
-                json.decodeFromString<List<FeedInfo>>(customFeedsJson)
-            } catch (e: Exception) {
+
+        synchronized(feedsLock) {
+            if (customFeedsJson == lastCustomFeedsJson) {
+                return DefaultFeeds.feeds + lastParsedCustomFeeds
+            }
+
+            val customFeeds = if (!customFeedsJson.isNullOrBlank()) {
+                try {
+                    json.decodeFromString<List<FeedInfo>>(customFeedsJson)
+                } catch (e: Exception) {
+                    Log.e(TAG, "Error parsing custom feeds", e)
+                    emptyList()
+                }
+            } else {
                 emptyList()
             }
-        } else {
-            emptyList()
-        }
 
-        return DefaultFeeds.feeds + customFeeds
+            lastCustomFeedsJson = customFeedsJson
+            lastParsedCustomFeeds = customFeeds
+            return DefaultFeeds.feeds + customFeeds
+        }
     }
 
     suspend fun addFeed(name: String, url: String) {
@@ -136,5 +153,6 @@ class RSSService @Inject constructor(
 
     companion object {
         private const val USER_AGENT = "Feedflow RSS Reader/1.0"
+        private const val TAG = "RSSService"
     }
 }
