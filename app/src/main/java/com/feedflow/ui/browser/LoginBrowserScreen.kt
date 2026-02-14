@@ -151,6 +151,7 @@ private fun extractCookiesForSite(siteId: String): Set<String> {
         "linux_do" -> listOf("https://linux.do")
         "zhihu" -> listOf("https://www.zhihu.com", "https://zhihu.com")
         "nodeseek" -> listOf("https://www.nodeseek.com", "https://nodeseek.com")
+        "2libra" -> listOf("https://2libra.com", "https://www.2libra.com")
         else -> emptyList()
     }
 
@@ -200,7 +201,12 @@ private fun isLoginSuccess(siteId: String, url: String, cookies: Set<String>): B
         "nodeseek" -> {
             // NodeSeek sets session cookie on login
             val hasAuthCookie = cookieNames.any { it.contains("session") || it.contains("token") || it.contains("auth") }
-            hasAuthCookie && url.contains("nodeseek.com") && !url.contains("/signIn")
+            hasAuthCookie && url.contains("nodeseek.com") && !url.contains("/signIn.html")
+        }
+        "2libra" -> {
+            // 2Libra sets session/token cookie on login
+            val hasAuthCookie = cookieNames.any { it.contains("session") || it.contains("token") || it.contains("auth") }
+            hasAuthCookie && url.contains("2libra.com") && !url.contains("/auth/login")
         }
         else -> false
     }

@@ -134,6 +134,7 @@
     <string name="forum_linuxdo">Linux.do</string>
     <string name="forum_zhihu">Zhihu</string>
     <string name="forum_nodeseek">NodeSeek</string>
+    <string name="forum_2libra">2Libra</string>
 
     <!-- Errors -->
     <string name="error_network">Network error. Please check your connection.</string>

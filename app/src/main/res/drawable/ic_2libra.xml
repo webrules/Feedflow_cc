@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="utf-8"?>
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="24dp"
+    android:height="24dp"
+    android:viewportWidth="24"
+    android:viewportHeight="24">
+    <!-- Libra scales symbol with "2" -->
+    <path
+        android:fillColor="#6366F1"
+        android:pathData="M3,3h18v18H3V3M5,5v14h14V5H5M8,8h2.5l1,2.5L10,13H8V8M12,17h5v-1h-5V17M7,17h4v-1H7V17M14,8h2v7h-2V8Z"/>
+</vector>
