@@ -10,10 +10,14 @@ import com.feedflow.data.model.User
 import com.feedflow.util.GBKUtils
 import com.feedflow.util.HtmlUtils
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
+import okhttp3.Cookie
 import okhttp3.FormBody
 import okhttp3.OkHttpClient
 import okhttp3.Request
+import okhttp3.Response
 import org.jsoup.Jsoup
 import java.nio.charset.Charset
 import javax.inject.Inject
@@ -31,6 +35,7 @@ class FourD4YService @Inject constructor(
 
     private val baseUrl = "https://www.4d4y.com/forum"
     private val gbkCharset: Charset = Charset.forName("GBK")
+    private val cookieMutex = Mutex()
 
     private var sessionId: String? = null
     private var formHash: String? = null
@@ -40,6 +45,7 @@ class FourD4YService @Inject constructor(
         val request = buildRequest(url)
 
         val response = client.newCall(request).execute()
+        updateCookies(response)
         val bytes = response.body?.bytes() ?: return@withContext emptyList()
         val html = GBKUtils.smartDecode(bytes)
 
@@ -59,6 +65,7 @@ class FourD4YService @Inject constructor(
         val request = buildRequest(url)
 
         val response = client.newCall(request).execute()
+        updateCookies(response)
         val bytes = response.body?.bytes() ?: return@withContext emptyList()
         val html = GBKUtils.smartDecode(bytes)
 
@@ -78,6 +85,7 @@ class FourD4YService @Inject constructor(
             val request = buildRequest(url)
 
             val response = client.newCall(request).execute()
+            updateCookies(response)
             val bytes = response.body?.bytes() ?: throw Exception("Failed to load thread")
             val html = GBKUtils.smartDecode(bytes)
 
@@ -95,7 +103,6 @@ class FourD4YService @Inject constructor(
 
             val url = "$baseUrl/post.php?action=reply&fid=$categoryId&tid=$topicId&replysubmit=yes&sid=$sid&inajax=1"
 
-            val encodedContent = GBKUtils.encodeToGBK(content)
             val formBody = FormBody.Builder()
                 .add("formhash", hash)
                 .add("message", content)
@@ -109,6 +116,7 @@ class FourD4YService @Inject constructor(
                 .build()
 
             val response = client.newCall(request).execute()
+            updateCookies(response)
             if (!response.isSuccessful) {
                 throw Exception("Failed to post comment: ${response.code}")
             }
@@ -127,6 +135,7 @@ class FourD4YService @Inject constructor(
         val firstUrl = "$baseUrl/forumdisplay.php?fid=$fid$sidParam&orderby=lastpost&filter=86400&page=1"
         val firstRequest = buildRequest(firstUrl)
         val firstResponse = client.newCall(firstRequest).execute()
+        updateCookies(firstResponse)
         val firstBytes = firstResponse.body?.bytes() ?: return@withContext emptyList()
         val firstHtml = GBKUtils.smartDecode(firstBytes)
 
@@ -152,6 +161,7 @@ class FourD4YService @Inject constructor(
                 val url = "$baseUrl/forumdisplay.php?fid=$fid$sidParam2&orderby=lastpost&filter=86400&page=$page"
                 val request = buildRequest(url)
                 val response = client.newCall(request).execute()
+                updateCookies(response)
                 val bytes = response.body?.bytes() ?: continue
                 val html = GBKUtils.smartDecode(bytes)
                 extractSessionId(html)
@@ -183,6 +193,42 @@ class FourD4YService @Inject constructor(
                 }
             }
             .build()
+    }
+
+    private suspend fun updateCookies(response: Response) {
+        val setCookieHeaders = response.headers("Set-Cookie")
+        if (setCookieHeaders.isEmpty()) return
+
+        cookieMutex.withLock {
+            val existingCookiesStr = encryptionHelper.getCookies(id) ?: ""
+            val cookieMap = mutableMapOf<String, String>()
+
+            if (existingCookiesStr.isNotBlank()) {
+                existingCookiesStr.split(";").forEach {
+                    val parts = it.split("=", limit = 2)
+                    if (parts.size == 2) {
+                        cookieMap[parts[0].trim()] = parts[1].trim()
+                    }
+                }
+            }
+
+            val url = response.request.url
+            for (header in setCookieHeaders) {
+                val cookie = Cookie.parse(url, header)
+                if (cookie != null) {
+                    if (cookie.expiresAt < System.currentTimeMillis()) {
+                        cookieMap.remove(cookie.name)
+                    } else {
+                        cookieMap[cookie.name] = cookie.value
+                    }
+                }
+            }
+
+            if (cookieMap.isNotEmpty()) {
+                val newCookieString = cookieMap.entries.joinToString("; ") { "${it.key}=${it.value}" }
+                encryptionHelper.saveCookies(id, newCookieString)
+            }
+        }
     }
 
     private fun extractSessionId(html: String) {
