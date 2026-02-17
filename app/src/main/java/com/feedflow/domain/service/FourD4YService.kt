@@ -232,15 +232,13 @@ class FourD4YService @Inject constructor(
     }
 
     private fun extractSessionId(html: String) {
-        val sidRegex = Regex("""sid=([a-zA-Z0-9]+)""")
-        sidRegex.find(html)?.let {
+        SID_REGEX.find(html)?.let {
             sessionId = it.groupValues[1]
         }
     }
 
     private fun extractFormHash(html: String) {
-        val hashRegex = Regex("""formhash=([a-zA-Z0-9]+)""")
-        hashRegex.find(html)?.let {
+        FORM_HASH_REGEX.find(html)?.let {
             formHash = it.groupValues[1]
         }
     }
@@ -301,7 +299,7 @@ class FourD4YService @Inject constructor(
 
                 // Extract date from first <p> text (after author link), e.g. "/ 2026-2-9"
                 val pText = firstP?.text() ?: ""
-                val dateMatch = Regex("""/\s*(\d{4}-\d{1,2}-\d{1,2})""").find(pText)
+                val dateMatch = DATE_MATCH_REGEX.find(pText)
                 val timeAgo = dateMatch?.groupValues?.get(1) ?: ""
 
                 // Extract reply count from sibling <td><a class="num">
@@ -327,31 +325,15 @@ class FourD4YService @Inject constructor(
 
         // Fallback: if WAP template parsing found nothing, try desktop Discuz selectors
         if (threads.isEmpty()) {
-            val rowPattern = Regex(
-                """<tbody[^>]*id="(?:normalthread_|stickthread_)(\d+)"[^>]*>(.*?)</tbody>""",
-                setOf(RegexOption.DOT_MATCHES_ALL, RegexOption.IGNORE_CASE)
-            )
-            val titlePattern = Regex(
-                """href="viewthread\.php\?tid=\d+[^"]*"[^>]*>([^<]+)</a>""",
-                RegexOption.IGNORE_CASE
-            )
-            val authorPattern = Regex(
-                """<td\s+class="author"[^>]*>.*?<a[^>]*>([^<]+)</a>""",
-                setOf(RegexOption.DOT_MATCHES_ALL, RegexOption.IGNORE_CASE)
-            )
-            val numsPattern = Regex(
-                """<td\s+class="nums"[^>]*>.*?<strong>(\d+)</strong>""",
-                setOf(RegexOption.DOT_MATCHES_ALL, RegexOption.IGNORE_CASE)
-            )
-            for (match in rowPattern.findAll(html)) {
+            for (match in ROW_PATTERN.findAll(html)) {
                 try {
                     val threadId = match.groupValues[1]
                     val rowContent = match.groupValues[2]
-                    val titleMatch = titlePattern.find(rowContent) ?: continue
+                    val titleMatch = TITLE_PATTERN.find(rowContent) ?: continue
                     val title = HtmlUtils.decodeHtmlEntities(titleMatch.groupValues[1].trim())
                     if (title.isBlank()) continue
-                    val authorName = authorPattern.find(rowContent)?.groupValues?.get(1)?.trim() ?: ""
-                    val replyCount = numsPattern.find(rowContent)?.groupValues?.get(1)?.toIntOrNull() ?: 0
+                    val authorName = AUTHOR_PATTERN.find(rowContent)?.groupValues?.get(1)?.trim() ?: ""
+                    val replyCount = NUMS_PATTERN.find(rowContent)?.groupValues?.get(1)?.toIntOrNull() ?: 0
                     threads.add(
                         ForumThread(
                             id = threadId,
@@ -376,23 +358,10 @@ class FourD4YService @Inject constructor(
         val doc = Jsoup.parse(html)
 
         // Parse title from <title> tag, stop at " - "
-        val titleFromTag = Regex("""<title>(.*?)(?:\s-\s|</title>)""", RegexOption.IGNORE_CASE)
-            .find(html)?.groupValues?.get(1)?.trim()
+        val titleFromTag = TITLE_FROM_TAG_REGEX.find(html)?.groupValues?.get(1)?.trim()
         val title = titleFromTag?.let { HtmlUtils.decodeHtmlEntities(it) }
             ?: doc.selectFirst("h2")?.text()?.trim()
             ?: ""
-
-        // ---- This forum uses a custom WAP/mobile Discuz 7.2 template ----
-        // OP structure:
-        //   <div class="detailcon" id="pidXXXXX">...content...</div>
-        //   Author: <a href="space.php?uid=...">Name</a> before <em id="authorpostonXXXXX">
-        // Reply structure:
-        //   <div class="w replylist"><ul>
-        //     <li id="pidXXXXX">
-        //       <div class="replytop">...<a href="space.php?uid=...">Author</a>/ timestamp</div>
-        //       <div class="replycon">...content...</div>
-        //     </li>
-        //   </ul></div>
 
         data class PostData(val id: String, val content: String, val author: String, val time: String)
         val posts = mutableListOf<PostData>()
@@ -404,11 +373,7 @@ class FourD4YService @Inject constructor(
             val content = opContent.html()
 
             // OP author: find <a href="space.php?uid=..."> near <em id="authorpostonXXX">
-            val opAuthorRegex = Regex(
-                """<a[^>]*href="space\.php\?uid=\d+"[^>]*>([^<]+)</a>\s*\n?\s*<em\s+id="authorposton""",
-                setOf(RegexOption.DOT_MATCHES_ALL, RegexOption.IGNORE_CASE)
-            )
-            val opAuthor = opAuthorRegex.find(html)?.groupValues?.get(1)?.trim() ?: "Anonymous"
+            val opAuthor = OP_AUTHOR_REGEX.find(html)?.groupValues?.get(1)?.trim() ?: "Anonymous"
 
             // OP time from <em id="authorpostonXXXXX">发表于 2026-2-10 09:45</em>
             val opTime = doc.selectFirst("em[id^=authorposton]")?.text()
@@ -435,7 +400,7 @@ class FourD4YService @Inject constructor(
                 author = authorLink?.text()?.trim() ?: "Anonymous"
                 // Time is the text after the author link, e.g. "/ 2026-2-10 09:48"
                 val topText = replyTop.text()
-                val timeMatch = Regex("""/\s*(\d{4}-\d{1,2}-\d{1,2}\s+\d{1,2}:\d{2})""").find(topText)
+                val timeMatch = REPLY_TIME_REGEX.find(topText)
                 time = timeMatch?.groupValues?.get(1) ?: ""
             }
 
@@ -509,15 +474,11 @@ class FourD4YService @Inject constructor(
         }
 
         // Calculate total pages from pagination links
-        // WAP template: <div class="pages"> or <div class="w pages">
-        // Look for page links like page=2, page=3 etc., or <strong>2</strong> for current page
         val totalPages = run {
-            // Try to find max page number from any page=N parameter in the HTML
-            val pageNums = Regex("""[?&]page=(\d+)""").findAll(html)
+            val pageNums = PAGE_NUM_REGEX.findAll(html)
                 .mapNotNull { it.groupValues[1].toIntOrNull() }
                 .toList()
-            // Also look for <strong>N</strong> inside pages div (current page indicator)
-            val strongNums = Regex("""<strong>(\d+)</strong>""").findAll(html)
+            val strongNums = STRONG_NUM_REGEX.findAll(html)
                 .mapNotNull { it.groupValues[1].toIntOrNull() }
                 .filter { it in 1..999 }
                 .toList()
@@ -537,36 +498,65 @@ class FourD4YService @Inject constructor(
     }
 
     private fun cleanPostContent(rawHtml: String): String {
-        // Remove attachments
-        val noAttach = rawHtml.replace(Regex("""<div class="t_attach".*?</div>""", setOf(RegexOption.DOT_MATCHES_ALL, RegexOption.IGNORE_CASE)), "")
-        // Remove ignore_js_op blocks
-        val noJs = noAttach.replace(Regex("""<ignore_js_op>.*?</ignore_js_op>""", setOf(RegexOption.DOT_MATCHES_ALL, RegexOption.IGNORE_CASE)), "")
-        // Remove smiley images but keep regular images
-        val noSmileys = noJs.replace(Regex("""<img[^>]*smilieid[^>]*/?>""", RegexOption.IGNORE_CASE), "")
-        // Remove edit notices: <i class="pstatus"> 本帖最后由 ... 编辑 </i>
-        val noPstatus = noSmileys.replace(Regex("""<i\s+class="pstatus"[^>]*>.*?</i>""", setOf(RegexOption.DOT_MATCHES_ALL, RegexOption.IGNORE_CASE)), "")
-        // Remove back.gif links (the <a> wrapping the back.gif image)
-        val noBackGif = noPstatus.replace(Regex("""<a[^>]*>\s*<img[^>]*common/back\.gif[^>]*/?\s*>\s*</a>""", setOf(RegexOption.DOT_MATCHES_ALL, RegexOption.IGNORE_CASE)), "")
-        // Remove common user signatures/footers
-        val noSigs = noBackGif
-            .replace(Regex("""<a[^>]*viewthread\.php\?tid=2849673[^>]*>.*?</a>""", setOf(RegexOption.DOT_MATCHES_ALL, RegexOption.IGNORE_CASE)), "")  // 每日地板
-            .replace(Regex("""<a[^>]*viewthread\.php\?tid=3419373[^>]*>.*?</a>""", setOf(RegexOption.DOT_MATCHES_ALL, RegexOption.IGNORE_CASE)), "")  // Re:Source
-            .replace(Regex("""<a[^>]*viewthread\.php\?tid=2950630[^>]*>.*?</a>""", setOf(RegexOption.DOT_MATCHES_ALL, RegexOption.IGNORE_CASE)), "")  // 论坛助手
-            .replace(Regex("""<a[^>]*viewthread\.php\?tid=1579403[^>]*>.*?</a>""", setOf(RegexOption.DOT_MATCHES_ALL, RegexOption.IGNORE_CASE)), "")  // HiPDA·NG
-            .replace(Regex("""<font[^>]*>\s*iOS fly ~\s*</font>""", RegexOption.IGNORE_CASE), "")
-            .replace(Regex("""<font[^>]*color="#999"[^>]*>\s*.*?I love 4d4y~\s*</font>""", setOf(RegexOption.DOT_MATCHES_ALL, RegexOption.IGNORE_CASE)), "")
-        // Flatten reply-to blocks: <strong>回复 <a ...>27#</a> <i>username</i></strong> → 回复 27# username
-        val noReplyTags = noSigs.replace(
-            Regex("""<strong>\s*回复\s*<a[^>]*>(\d+#)</a>\s*<i>([^<]*)</i>\s*</strong>""", setOf(RegexOption.DOT_MATCHES_ALL, RegexOption.IGNORE_CASE)),
-            "回复 $1 $2 "
-        )
-        val cleaned = HtmlUtils.cleanHtml(noReplyTags)
-        // Collapse newlines around "回复 XX# username" so it stays inline with content
-        // e.g. "回复\n27#\nshooirin还有一个" → "回复 27# shooirin还有一个"
-        return cleaned.replace(Regex("""回复\s*\n+\s*(\d+#)\s*\n+\s*"""), "回复 $1 ")
+        // Apply replacements using precompiled regex
+        var processed = rawHtml
+            .replace(ATTACH_REGEX, "")
+            .replace(IGNORE_JS_OP_REGEX, "")
+            .replace(SMILEY_REGEX, "")
+            .replace(PSTATUS_REGEX, "")
+            .replace(BACK_GIF_REGEX, "")
+            // Signatures
+            .replace(SIG_DAILY_FLOOR, "")
+            .replace(SIG_RESOURCE, "")
+            .replace(SIG_HELPER, "")
+            .replace(SIG_HIPDA, "")
+            .replace(SIG_IOS_FLY, "")
+            .replace(SIG_LOVE_4D4Y, "")
+            // Reply tags
+            .replace(REPLY_TAG_REGEX, "回复 $1 $2 ")
+
+        val cleaned = HtmlUtils.cleanHtml(processed)
+        return cleaned.replace(REPLY_CLEANUP_REGEX, "回复 $1 ")
     }
 
     companion object {
         private const val USER_AGENT = "Mozilla/5.0 (Linux; Android 14) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Mobile Safari/537.36"
+
+        // Regex Patterns
+        private val SID_REGEX = Regex("""sid=([a-zA-Z0-9]+)""")
+        private val FORM_HASH_REGEX = Regex("""formhash=([a-zA-Z0-9]+)""")
+
+        private val ATTACH_REGEX = Regex("""<div class="t_attach".*?</div>""", setOf(RegexOption.DOT_MATCHES_ALL, RegexOption.IGNORE_CASE))
+        private val IGNORE_JS_OP_REGEX = Regex("""<ignore_js_op>.*?</ignore_js_op>""", setOf(RegexOption.DOT_MATCHES_ALL, RegexOption.IGNORE_CASE))
+        private val SMILEY_REGEX = Regex("""<img[^>]*smilieid[^>]*/?>""", RegexOption.IGNORE_CASE)
+        private val PSTATUS_REGEX = Regex("""<i\s+class="pstatus"[^>]*>.*?</i>""", setOf(RegexOption.DOT_MATCHES_ALL, RegexOption.IGNORE_CASE))
+        private val BACK_GIF_REGEX = Regex("""<a[^>]*>\s*<img[^>]*common/back\.gif[^>]*/?\s*>\s*</a>""", setOf(RegexOption.DOT_MATCHES_ALL, RegexOption.IGNORE_CASE))
+
+        // Signatures
+        private val SIG_DAILY_FLOOR = Regex("""<a[^>]*viewthread\.php\?tid=2849673[^>]*>.*?</a>""", setOf(RegexOption.DOT_MATCHES_ALL, RegexOption.IGNORE_CASE))
+        private val SIG_RESOURCE = Regex("""<a[^>]*viewthread\.php\?tid=3419373[^>]*>.*?</a>""", setOf(RegexOption.DOT_MATCHES_ALL, RegexOption.IGNORE_CASE))
+        private val SIG_HELPER = Regex("""<a[^>]*viewthread\.php\?tid=2950630[^>]*>.*?</a>""", setOf(RegexOption.DOT_MATCHES_ALL, RegexOption.IGNORE_CASE))
+        private val SIG_HIPDA = Regex("""<a[^>]*viewthread\.php\?tid=1579403[^>]*>.*?</a>""", setOf(RegexOption.DOT_MATCHES_ALL, RegexOption.IGNORE_CASE))
+        private val SIG_IOS_FLY = Regex("""<font[^>]*>\s*iOS fly ~\s*</font>""", RegexOption.IGNORE_CASE)
+        private val SIG_LOVE_4D4Y = Regex("""<font[^>]*color="#999"[^>]*>\s*.*?I love 4d4y~\s*</font>""", setOf(RegexOption.DOT_MATCHES_ALL, RegexOption.IGNORE_CASE))
+
+        private val REPLY_TAG_REGEX = Regex("""<strong>\s*回复\s*<a[^>]*>(\d+#)</a>\s*<i>([^<]*)</i>\s*</strong>""", setOf(RegexOption.DOT_MATCHES_ALL, RegexOption.IGNORE_CASE))
+        private val REPLY_CLEANUP_REGEX = Regex("""回复\s*\n+\s*(\d+#)\s*\n+\s*""")
+
+        // Pagination
+        private val PAGE_NUM_REGEX = Regex("""[?&]page=(\d+)""")
+        private val STRONG_NUM_REGEX = Regex("""<strong>(\d+)</strong>""")
+
+        // Thread parsing
+        private val TITLE_FROM_TAG_REGEX = Regex("""<title>(.*?)(?:\s-\s|</title>)""", RegexOption.IGNORE_CASE)
+        private val OP_AUTHOR_REGEX = Regex("""<a[^>]*href="space\.php\?uid=\d+"[^>]*>([^<]+)</a>\s*\n?\s*<em\s+id="authorposton""", setOf(RegexOption.DOT_MATCHES_ALL, RegexOption.IGNORE_CASE))
+        private val DATE_MATCH_REGEX = Regex("""/\s*(\d{4}-\d{1,2}-\d{1,2})""")
+        private val REPLY_TIME_REGEX = Regex("""/\s*(\d{4}-\d{1,2}-\d{1,2}\s+\d{1,2}:\d{2})""")
+
+        // Fallback parsing
+        private val ROW_PATTERN = Regex("""<tbody[^>]*id="(?:normalthread_|stickthread_)(\d+)"[^>]*>(.*?)</tbody>""", setOf(RegexOption.DOT_MATCHES_ALL, RegexOption.IGNORE_CASE))
+        private val TITLE_PATTERN = Regex("""href="viewthread\.php\?tid=\d+[^"]*"[^>]*>([^<]+)</a>""", RegexOption.IGNORE_CASE)
+        private val AUTHOR_PATTERN = Regex("""<td\s+class="author"[^>]*>.*?<a[^>]*>([^<]+)</a>""", setOf(RegexOption.DOT_MATCHES_ALL, RegexOption.IGNORE_CASE))
+        private val NUMS_PATTERN = Regex("""<td\s+class="nums"[^>]*>.*?<strong>(\d+)</strong>""", setOf(RegexOption.DOT_MATCHES_ALL, RegexOption.IGNORE_CASE))
     }
 }
