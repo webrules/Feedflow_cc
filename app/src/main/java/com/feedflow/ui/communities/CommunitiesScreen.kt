@@ -3,9 +3,12 @@ package com.feedflow.ui.communities
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.material3.Button
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
@@ -41,6 +44,7 @@ fun CommunitiesScreen(
     siteId: String,
     onCommunityClick: (Community) -> Unit,
     onBackClick: () -> Unit,
+    onOpenLoginBrowser: () -> Unit,
     viewModel: CommunitiesViewModel = hiltViewModel()
 ) {
     val communities by viewModel.communities.collectAsState()
@@ -87,13 +91,25 @@ fun CommunitiesScreen(
                     )
                 }
                 error != null && communities.isEmpty() -> {
-                    Text(
-                        text = error ?: stringResource(R.string.error_loading),
+                    Column(
                         modifier = Modifier
                             .align(Alignment.Center)
                             .padding(16.dp),
-                        color = MaterialTheme.colorScheme.error
-                    )
+                        horizontalAlignment = Alignment.CenterHorizontally
+                    ) {
+                        Text(
+                            text = error ?: stringResource(R.string.error_loading),
+                            color = MaterialTheme.colorScheme.error
+                        )
+                        if (error?.contains("Cloudflare", ignoreCase = true) == true ||
+                            error?.contains("challenge", ignoreCase = true) == true
+                        ) {
+                            Spacer(modifier = Modifier.size(16.dp))
+                            Button(onClick = onOpenLoginBrowser) {
+                                Text("Open Browser to Solve Challenge")
+                            }
+                        }
+                    }
                 }
                 communities.isEmpty() -> {
                     Text(

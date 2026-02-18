@@ -67,7 +67,10 @@ fun NavGraph(
                 onCommunityClick = { community ->
                     navController.navigate(Screen.ThreadList.createRoute(siteId, community.id))
                 },
-                onBackClick = { navController.popBackStack() }
+                onBackClick = { navController.popBackStack() },
+                onOpenLoginBrowser = {
+                    navController.navigate(Screen.LoginBrowser.createRoute(siteId, "https://linux.do"))
+                }
             )
         }
 
@@ -88,7 +91,10 @@ fun NavGraph(
                     navController.navigate(Screen.ThreadDetail.createRoute(siteId, thread.id))
                 },
                 onBackClick = { navController.popBackStack() },
-                onHomeClick = { navController.popBackStack(Screen.Home.route, false) }
+                onHomeClick = { navController.popBackStack(Screen.Home.route, false) },
+                onOpenLoginBrowser = {
+                    navController.navigate(Screen.LoginBrowser.createRoute(siteId, "https://linux.do"))
+                }
             )
         }
 
@@ -158,9 +164,8 @@ fun NavGraph(
                 siteId = siteId,
                 url = url,
                 onBackClick = { navController.popBackStack() },
-                onLoginSuccess = { loggedInSiteId ->
-                    navController.popBackStack(Screen.Home.route, false)
-                    navController.navigate(Screen.Communities.createRoute(loggedInSiteId))
+                onLoginSuccess = { _ ->
+                    navController.popBackStack()
                 }
             )
         }

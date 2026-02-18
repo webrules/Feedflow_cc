@@ -23,6 +23,7 @@ import androidx.compose.material.icons.automirrored.filled.Comment
 import androidx.compose.material.icons.filled.Home
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.ThumbUp
+import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CircularProgressIndicator
@@ -60,6 +61,7 @@ fun ThreadListScreen(
     onThreadClick: (ForumThread) -> Unit,
     onBackClick: () -> Unit,
     onHomeClick: () -> Unit,
+    onOpenLoginBrowser: () -> Unit,
     viewModel: ThreadListViewModel = hiltViewModel()
 ) {
     val threads by viewModel.threads.collectAsState()
@@ -126,13 +128,25 @@ fun ThreadListScreen(
                     )
                 }
                 error != null && threads.isEmpty() -> {
-                    Text(
-                        text = error ?: stringResource(R.string.error_loading),
+                    Column(
                         modifier = Modifier
                             .align(Alignment.Center)
                             .padding(16.dp),
-                        color = MaterialTheme.colorScheme.error
-                    )
+                        horizontalAlignment = Alignment.CenterHorizontally
+                    ) {
+                        Text(
+                            text = error ?: stringResource(R.string.error_loading),
+                            color = MaterialTheme.colorScheme.error
+                        )
+                        if (error?.contains("Cloudflare", ignoreCase = true) == true ||
+                            error?.contains("challenge", ignoreCase = true) == true
+                        ) {
+                            Spacer(modifier = Modifier.size(16.dp))
+                            Button(onClick = onOpenLoginBrowser) {
+                                Text("Open Browser to Solve Challenge")
+                            }
+                        }
+                    }
                 }
                 else -> {
                     LazyColumn(
