@@ -123,7 +123,7 @@ fun LoginBrowserScreen(
                             useWideViewPort = true
                             builtInZoomControls = true
                             displayZoomControls = false
-                            userAgentString = "Mozilla/5.0 (Linux; Android 14) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Mobile Safari/537.36"
+                            userAgentString = com.feedflow.util.BrowserCompat.USER_AGENT
                         }
 
                         webView = this
