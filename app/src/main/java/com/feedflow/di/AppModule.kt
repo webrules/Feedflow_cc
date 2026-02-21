@@ -19,8 +19,11 @@ object AppModule {
 
     @Provides
     @Singleton
-    fun providePreferencesManager(@ApplicationContext context: Context): PreferencesManager {
-        return PreferencesManager(context)
+    fun providePreferencesManager(
+        @ApplicationContext context: Context,
+        encryptionHelper: EncryptionHelper
+    ): PreferencesManager {
+        return PreferencesManager(context, encryptionHelper)
     }
 
     @Provides

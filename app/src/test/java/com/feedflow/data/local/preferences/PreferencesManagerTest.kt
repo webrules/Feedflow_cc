@@ -3,6 +3,7 @@ package com.feedflow.data.local.preferences
 import android.content.Context
 import androidx.test.core.app.ApplicationProvider
 import androidx.test.ext.junit.runners.AndroidJUnit4
+import com.feedflow.data.local.encryption.EncryptionHelper
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.test.runTest
 import org.junit.Assert.assertEquals
@@ -18,11 +19,13 @@ class PreferencesManagerTest {
 
     private lateinit var preferencesManager: PreferencesManager
     private lateinit var context: Context
+    private lateinit var encryptionHelper: EncryptionHelper
 
     @Before
     fun setup() {
         context = ApplicationProvider.getApplicationContext()
-        preferencesManager = PreferencesManager(context)
+        encryptionHelper = EncryptionHelper(context)
+        preferencesManager = PreferencesManager(context, encryptionHelper)
     }
 
     @Test
