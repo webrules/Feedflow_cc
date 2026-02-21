@@ -37,7 +37,6 @@ class FourD4YService @Inject constructor(
     private val gbkCharset: Charset = Charset.forName("GBK")
     private val cookieMutex = Mutex()
 
-    private var sessionId: String? = null
     private var formHash: String? = null
 
     override suspend fun fetchCategories(): List<Community> = withContext(Dispatchers.IO) {
@@ -49,9 +48,6 @@ class FourD4YService @Inject constructor(
         val bytes = response.body?.bytes() ?: return@withContext emptyList()
         val html = GBKUtils.smartDecode(bytes)
 
-        // Extract session ID
-        extractSessionId(html)
-
         parseCategories(html)
     }
 
@@ -60,17 +56,13 @@ class FourD4YService @Inject constructor(
         communities: List<Community>,
         page: Int
     ): List<ForumThread> = withContext(Dispatchers.IO) {
-        val sidParam = sessionId?.let { "&sid=$it" } ?: ""
-        val url = "$baseUrl/forumdisplay.php?fid=$categoryId$sidParam&page=$page"
+        val url = "$baseUrl/forumdisplay.php?fid=$categoryId&page=$page"
         val request = buildRequest(url)
 
         val response = client.newCall(request).execute()
         updateCookies(response)
         val bytes = response.body?.bytes() ?: return@withContext emptyList()
         val html = GBKUtils.smartDecode(bytes)
-
-        // Update session ID
-        extractSessionId(html)
 
         val community = communities.find { it.id == categoryId }
             ?: Community(categoryId, "Forum", "", id)
@@ -80,8 +72,7 @@ class FourD4YService @Inject constructor(
 
     override suspend fun fetchThreadDetail(threadId: String, page: Int): ThreadDetailResult =
         withContext(Dispatchers.IO) {
-            val sidParam = sessionId?.let { "&sid=$it" } ?: ""
-            val url = "$baseUrl/viewthread.php?tid=$threadId$sidParam&page=$page"
+            val url = "$baseUrl/viewthread.php?tid=$threadId&page=$page"
             val request = buildRequest(url)
 
             val response = client.newCall(request).execute()
@@ -89,8 +80,6 @@ class FourD4YService @Inject constructor(
             val bytes = response.body?.bytes() ?: throw Exception("Failed to load thread")
             val html = GBKUtils.smartDecode(bytes)
 
-            // Update session ID and form hash
-            extractSessionId(html)
             extractFormHash(html)
 
             parseThreadDetail(html, threadId, page)
@@ -99,9 +88,8 @@ class FourD4YService @Inject constructor(
     override suspend fun postComment(topicId: String, categoryId: String, content: String) =
         withContext(Dispatchers.IO) {
             val hash = formHash ?: throw Exception("Form hash not found. Please refresh the thread.")
-            val sid = sessionId ?: ""
 
-            val url = "$baseUrl/post.php?action=reply&fid=$categoryId&tid=$topicId&replysubmit=yes&sid=$sid&inajax=1"
+            val url = "$baseUrl/post.php?action=reply&fid=$categoryId&tid=$topicId&replysubmit=yes&inajax=1"
 
             val formBody = FormBody.Builder()
                 .add("formhash", hash)
@@ -131,15 +119,13 @@ class FourD4YService @Inject constructor(
         val community = Community(fid, "Forum", "", id)
 
         // Fetch page 1 first to determine total page count
-        val sidParam = sessionId?.let { "&sid=$it" } ?: ""
-        val firstUrl = "$baseUrl/forumdisplay.php?fid=$fid$sidParam&orderby=lastpost&filter=86400&page=1"
+        val firstUrl = "$baseUrl/forumdisplay.php?fid=$fid&orderby=lastpost&filter=86400&page=1"
         val firstRequest = buildRequest(firstUrl)
         val firstResponse = client.newCall(firstRequest).execute()
         updateCookies(firstResponse)
         val firstBytes = firstResponse.body?.bytes() ?: return@withContext emptyList()
         val firstHtml = GBKUtils.smartDecode(firstBytes)
 
-        extractSessionId(firstHtml)
         allThreads.addAll(parseThreadList(firstHtml, community))
 
         // Dynamically extract total page count from pagination HTML
@@ -157,14 +143,12 @@ class FourD4YService @Inject constructor(
         // Fetch remaining pages
         for (page in 2..maxPage) {
             try {
-                val sidParam2 = sessionId?.let { "&sid=$it" } ?: ""
-                val url = "$baseUrl/forumdisplay.php?fid=$fid$sidParam2&orderby=lastpost&filter=86400&page=$page"
+                val url = "$baseUrl/forumdisplay.php?fid=$fid&orderby=lastpost&filter=86400&page=$page"
                 val request = buildRequest(url)
                 val response = client.newCall(request).execute()
                 updateCookies(response)
                 val bytes = response.body?.bytes() ?: continue
                 val html = GBKUtils.smartDecode(bytes)
-                extractSessionId(html)
                 allThreads.addAll(parseThreadList(html, community))
             } catch (e: Exception) {
                 android.util.Log.e("4D4Y", "Error fetching page $page", e)
@@ -228,12 +212,6 @@ class FourD4YService @Inject constructor(
                 val newCookieString = cookieMap.entries.joinToString("; ") { "${it.key}=${it.value}" }
                 encryptionHelper.saveCookies(id, newCookieString)
             }
-        }
-    }
-
-    private fun extractSessionId(html: String) {
-        SID_REGEX.find(html)?.let {
-            sessionId = it.groupValues[1]
         }
     }
 
@@ -523,7 +501,6 @@ class FourD4YService @Inject constructor(
         private const val USER_AGENT = "Mozilla/5.0 (Linux; Android 14) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Mobile Safari/537.36"
 
         // Regex Patterns
-        private val SID_REGEX = Regex("""sid=([a-zA-Z0-9]+)""")
         private val FORM_HASH_REGEX = Regex("""formhash=([a-zA-Z0-9]+)""")
 
         private val ATTACH_REGEX = Regex("""<div class="t_attach".*?</div>""", setOf(RegexOption.DOT_MATCHES_ALL, RegexOption.IGNORE_CASE))
