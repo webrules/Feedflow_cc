@@ -13,6 +13,8 @@ import com.feedflow.domain.parser.RSSParser
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.withContext
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
 import okhttp3.OkHttpClient
@@ -38,7 +40,7 @@ class RSSService @Inject constructor(
 
     private var lastCustomFeedsJson: String? = null
     private var lastParsedCustomFeeds: List<FeedInfo> = emptyList()
-    private val feedsLock = Any()
+    private val feedsMutex = Mutex()
 
     override suspend fun fetchCategories(): List<Community> {
         val feeds = getFeeds()
@@ -108,30 +110,27 @@ class RSSService @Inject constructor(
 
     override fun getWebURL(thread: ForumThread): String = thread.id // RSS uses URL as ID
 
-    // Feed Management
-    suspend fun getFeeds(): List<FeedInfo> {
+    suspend fun getFeeds(): List<FeedInfo> = feedsMutex.withLock {
         val customFeedsJson = preferencesManager.customRssFeeds.first()
 
-        synchronized(feedsLock) {
-            if (customFeedsJson == lastCustomFeedsJson) {
-                return DefaultFeeds.feeds + lastParsedCustomFeeds
-            }
+        if (customFeedsJson == lastCustomFeedsJson) {
+            return DefaultFeeds.feeds + lastParsedCustomFeeds
+        }
 
-            val customFeeds = if (!customFeedsJson.isNullOrBlank()) {
-                try {
-                    json.decodeFromString<List<FeedInfo>>(customFeedsJson)
-                } catch (e: Exception) {
-                    Log.e(TAG, "Error parsing custom feeds", e)
-                    emptyList()
-                }
-            } else {
+        val customFeeds = if (!customFeedsJson.isNullOrBlank()) {
+            try {
+                json.decodeFromString<List<FeedInfo>>(customFeedsJson)
+            } catch (e: Exception) {
+                Log.e(TAG, "Error parsing custom feeds", e)
                 emptyList()
             }
-
-            lastCustomFeedsJson = customFeedsJson
-            lastParsedCustomFeeds = customFeeds
-            return DefaultFeeds.feeds + customFeeds
+        } else {
+            emptyList()
         }
+
+        lastCustomFeedsJson = customFeedsJson
+        lastParsedCustomFeeds = customFeeds
+        return DefaultFeeds.feeds + customFeeds
     }
 
     suspend fun addFeed(name: String, url: String) {

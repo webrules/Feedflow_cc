@@ -15,6 +15,23 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
 import javax.inject.Inject
 
+sealed class ThreadDetailState {
+    data object Loading : ThreadDetailState()
+    data class Loaded(
+        val thread: ForumThread,
+        val comments: List<Comment>,
+        val isLoadingMore: Boolean = false,
+        val isFresh: Boolean = true,
+        val isBookmarked: Boolean = false,
+        val replyingTo: Comment? = null,
+        val summary: String? = null,
+        val isSummaryLoading: Boolean = false,
+        val isSummaryCached: Boolean = false,
+        val hasMorePages: Boolean = false
+    ) : ThreadDetailState()
+    data class Error(val message: String, val cachedThread: ForumThread? = null) : ThreadDetailState()
+}
+
 @HiltViewModel
 class ThreadDetailViewModel @Inject constructor(
     private val cacheRepository: CacheRepository,
@@ -23,39 +40,8 @@ class ThreadDetailViewModel @Inject constructor(
     private val forumServices: Map<String, @JvmSuppressWildcards ForumService>
 ) : ViewModel() {
 
-    private val _thread = MutableStateFlow<ForumThread?>(null)
-    val thread: StateFlow<ForumThread?> = _thread.asStateFlow()
-
-    private val _comments = MutableStateFlow<List<Comment>>(emptyList())
-    val comments: StateFlow<List<Comment>> = _comments.asStateFlow()
-
-    private val _isLoading = MutableStateFlow(false)
-    val isLoading: StateFlow<Boolean> = _isLoading.asStateFlow()
-
-    private val _isLoadingMore = MutableStateFlow(false)
-    val isLoadingMore: StateFlow<Boolean> = _isLoadingMore.asStateFlow()
-
-    private val _isFresh = MutableStateFlow(true)
-    val isFresh: StateFlow<Boolean> = _isFresh.asStateFlow()
-
-    private val _isBookmarked = MutableStateFlow(false)
-    val isBookmarked: StateFlow<Boolean> = _isBookmarked.asStateFlow()
-
-    private val _replyingTo = MutableStateFlow<Comment?>(null)
-    val replyingTo: StateFlow<Comment?> = _replyingTo.asStateFlow()
-
-    private val _error = MutableStateFlow<String?>(null)
-    val error: StateFlow<String?> = _error.asStateFlow()
-
-    // AI Summary
-    private val _summary = MutableStateFlow<String?>(null)
-    val summary: StateFlow<String?> = _summary.asStateFlow()
-
-    private val _isSummaryLoading = MutableStateFlow(false)
-    val isSummaryLoading: StateFlow<Boolean> = _isSummaryLoading.asStateFlow()
-
-    private val _isSummaryCached = MutableStateFlow(false)
-    val isSummaryCached: StateFlow<Boolean> = _isSummaryCached.asStateFlow()
+    private val _state = MutableStateFlow<ThreadDetailState>(ThreadDetailState.Loading)
+    val state: StateFlow<ThreadDetailState> = _state.asStateFlow()
 
     private var currentService: ForumService? = null
     private var currentThreadId: String? = null
@@ -68,49 +54,53 @@ class ThreadDetailViewModel @Inject constructor(
         currentPage = 1
 
         viewModelScope.launch {
-            _isLoading.value = true
-            _error.value = null
-            _isFresh.value = false
+            _state.value = ThreadDetailState.Loading
 
             try {
-                // Load from cache first
                 val cached = cacheRepository.getCachedThread(threadId)
                 if (cached != null) {
-                    _thread.value = cached.first
-                    _comments.value = cached.second
-                    _isLoading.value = false
+                    _state.value = ThreadDetailState.Loaded(
+                        thread = cached.first,
+                        comments = cached.second,
+                        isFresh = false
+                    )
                 }
 
-                // Fetch fresh data
                 val service = currentService ?: throw Exception("Service not found")
                 val result = service.fetchThreadDetail(threadId, 1)
 
-                _thread.value = result.thread
-                _comments.value = result.comments
                 totalPages = result.totalPages
-                _isFresh.value = true
+                val hasMorePages = totalPages != null && totalPages!! > 1
 
-                // Save to cache
                 cacheRepository.saveCachedThread(threadId, result.thread, result.comments)
+                val isBookmarked = bookmarkRepository.isBookmarked(threadId, serviceId)
 
-                // Check bookmark status
-                _isBookmarked.value = bookmarkRepository.isBookmarked(threadId, serviceId)
+                _state.value = ThreadDetailState.Loaded(
+                    thread = result.thread,
+                    comments = result.comments,
+                    isFresh = true,
+                    isBookmarked = isBookmarked,
+                    hasMorePages = hasMorePages
+                )
             } catch (e: Exception) {
-                if (_thread.value == null) {
-                    _error.value = e.message ?: "Failed to load thread"
-                }
-            } finally {
-                _isLoading.value = false
+                val currentState = _state.value
+                val cachedThread = if (currentState is ThreadDetailState.Loaded) currentState.thread else null
+                _state.value = ThreadDetailState.Error(
+                    message = e.message ?: "Failed to load thread",
+                    cachedThread = cachedThread
+                )
             }
         }
     }
 
     fun loadMoreComments() {
-        if (_isLoadingMore.value) return
+        val currentState = _state.value
+        if (currentState !is ThreadDetailState.Loaded) return
+        if (currentState.isLoadingMore) return
         if (totalPages != null && currentPage >= totalPages!!) return
 
         viewModelScope.launch {
-            _isLoadingMore.value = true
+            _state.value = currentState.copy(isLoadingMore = true)
 
             try {
                 val service = currentService ?: return@launch
@@ -118,108 +108,111 @@ class ThreadDetailViewModel @Inject constructor(
 
                 currentPage++
                 val result = service.fetchThreadDetail(threadId, currentPage)
-                _comments.value = _comments.value + result.comments
-
-                // Update totalPages from latest response
+                
                 if (result.totalPages != null) {
                     totalPages = result.totalPages
                 }
 
-                // Stop if no new comments were returned
                 if (result.comments.isEmpty()) {
                     totalPages = currentPage
                 }
+
+                _state.value = currentState.copy(
+                    comments = currentState.comments + result.comments,
+                    isLoadingMore = false,
+                    hasMorePages = totalPages != null && currentPage < totalPages!!
+                )
             } catch (e: Exception) {
                 currentPage--
-            } finally {
-                _isLoadingMore.value = false
+                _state.value = currentState.copy(isLoadingMore = false)
             }
         }
     }
 
     fun toggleBookmark() {
-        viewModelScope.launch {
-            val thread = _thread.value ?: return@launch
-            val service = currentService ?: return@launch
+        val currentState = _state.value
+        if (currentState !is ThreadDetailState.Loaded) return
 
-            bookmarkRepository.toggleBookmark(thread, service.id)
-            _isBookmarked.value = !_isBookmarked.value
+        viewModelScope.launch {
+            val service = currentService ?: return@launch
+            bookmarkRepository.toggleBookmark(currentState.thread, service.id)
+            _state.value = currentState.copy(isBookmarked = !currentState.isBookmarked)
         }
     }
 
     fun selectReplyTarget(comment: Comment?) {
-        _replyingTo.value = comment
+        val currentState = _state.value
+        if (currentState !is ThreadDetailState.Loaded) return
+        _state.value = currentState.copy(replyingTo = comment)
     }
 
     fun sendReply(content: String) {
+        val currentState = _state.value
+        if (currentState !is ThreadDetailState.Loaded) return
+
         viewModelScope.launch {
             try {
                 val service = currentService ?: throw Exception("Service not found")
-                val thread = _thread.value ?: throw Exception("Thread not found")
-                val categoryId = thread.community.id
+                val categoryId = currentState.thread.community.id
 
-                // Format content with quote if replying
-                val formattedContent = _replyingTo.value?.let { reply ->
+                val formattedContent = currentState.replyingTo?.let { reply ->
                     "[quote][b]${reply.author.username}:[/b]${reply.content.take(100)}...[/quote]\n$content"
                 } ?: content
 
-                service.postComment(thread.id, categoryId, formattedContent)
-
-                // Clear reply target
-                _replyingTo.value = null
-
-                // Refresh to show new comment
-                loadThread(thread.id, service.id)
+                service.postComment(currentState.thread.id, categoryId, formattedContent)
+                _state.value = currentState.copy(replyingTo = null)
+                loadThread(currentState.thread.id, service.id)
             } catch (e: Exception) {
-                _error.value = e.message ?: "Failed to post reply"
+                _state.value = ThreadDetailState.Error(e.message ?: "Failed to post reply")
             }
         }
     }
 
     fun generateSummary(forceRefresh: Boolean = false) {
+        val currentState = _state.value
+        if (currentState !is ThreadDetailState.Loaded) return
+
         viewModelScope.launch {
-            _isSummaryLoading.value = true
-            _error.value = null
+            _state.value = currentState.copy(isSummaryLoading = true)
 
             try {
-                val thread = _thread.value ?: throw Exception("No thread loaded")
+                val thread = currentState.thread
 
-                // Check cache first
                 if (!forceRefresh) {
-                    val cached = cacheRepository.getSummaryIfFresh(thread.id, 7 * 24 * 60 * 60) // 7 days
+                    val cached = cacheRepository.getSummaryIfFresh(thread.id, 7 * 24 * 60 * 60)
                     if (cached != null) {
-                        _summary.value = cached
-                        _isSummaryCached.value = true
-                        _isSummaryLoading.value = false
+                        _state.value = currentState.copy(
+                            summary = cached,
+                            isSummaryCached = true,
+                            isSummaryLoading = false
+                        )
                         return@launch
                     }
                 }
 
-                // Build content for summary
-                val commentsText = _comments.value.take(10).joinToString("\n\n") {
+                val commentsText = currentState.comments.take(10).joinToString("\n\n") {
                     "${it.author.username}: ${it.content}"
                 }
                 val fullContent = "${thread.title}\n\n${thread.content}\n\n$commentsText"
 
-                // Generate new summary
                 val newSummary = geminiService.generateSummary(fullContent)
-                _summary.value = newSummary
-                _isSummaryCached.value = false
-
-                // Save to cache
                 cacheRepository.saveSummary(thread.id, newSummary)
+                
+                _state.value = currentState.copy(
+                    summary = newSummary,
+                    isSummaryCached = false,
+                    isSummaryLoading = false
+                )
             } catch (e: Exception) {
-                _error.value = e.message ?: "Failed to generate summary"
-            } finally {
-                _isSummaryLoading.value = false
+                _state.value = currentState.copy(isSummaryLoading = false)
             }
         }
     }
 
     fun getWebURL(): String? {
-        val thread = _thread.value ?: return null
-        val service = currentService ?: return null
-        return service.getWebURL(thread)
+        val currentState = _state.value
+        if (currentState !is ThreadDetailState.Loaded) return null
+        return currentService?.getWebURL(currentState.thread)
     }
 
     fun getService(): ForumService? = currentService

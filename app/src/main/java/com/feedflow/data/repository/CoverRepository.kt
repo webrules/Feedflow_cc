@@ -2,20 +2,30 @@ package com.feedflow.data.repository
 
 import com.feedflow.data.local.db.dao.CoverSummaryDao
 import com.feedflow.data.local.db.entity.CoverSummaryEntity
-import com.feedflow.data.model.ForumThread
-import com.feedflow.data.remote.api.HackerNewsApi
-import com.feedflow.domain.service.FourD4YService
-import com.feedflow.domain.service.GeminiService
-import com.feedflow.domain.service.V2EXService
+import com.feedflow.data.model.Comment
 import com.feedflow.data.model.Community
+import com.feedflow.data.model.ForumThread
+import com.feedflow.data.model.ThreadDetailResult
+import com.feedflow.data.model.User
+import com.feedflow.data.remote.api.HackerNewsApi
+import com.feedflow.data.remote.dto.HNItem
+import com.feedflow.domain.service.FourD4YService
+import com.feedflow.domain.service.V2EXService
+import com.feedflow.domain.service.GeminiService
+import com.feedflow.util.TimeUtils
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.async
+import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.withContext
 import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
 import android.util.Log
 import javax.inject.Inject
 import javax.inject.Singleton
+import kotlinx.coroutines.sync.Semaphore
+import kotlinx.coroutines.sync.withPermit
 
 private const val TAG = "CoverRepository"
 
@@ -81,16 +91,16 @@ class CoverRepository @Inject constructor(
     private val geminiService: GeminiService
 ) {
     private val json = Json { ignoreUnknownKeys = true }
+    private val concurrencyLimit = Semaphore(10)
 
     suspend fun getCoverPage(forceRefresh: Boolean = false): CoverPageData {
         if (!forceRefresh) {
             val cached = coverSummaryDao.getLatest()
             if (cached != null && cached.isFresh()) {
-                // Treat empty or very short summaries as failed — don't serve stale failures
                 if (cached.summary.length < 50) {
                     Log.w(TAG, "getCoverPage: cached summary too short (${cached.summary.length} chars), regenerating")
                 } else {
-                    Log.d(TAG, "getCoverPage: serving from cache (age=${(System.currentTimeMillis() - cached.createdAt) / 1000}s, summary=${cached.summary.length} chars)")
+                    Log.d(TAG, "getCoverPage: serving from cache")
                     return entityToData(cached, fromCache = true)
                 }
             }
@@ -135,21 +145,15 @@ class CoverRepository @Inject constructor(
                 if (fourD4yPairs.isNotEmpty()) geminiService.generateSiteSummary("4D4Y", fourD4yPairs) else ""
             }
 
-            val hnSummary = try { hnSummaryDeferred.await() } catch (e: Exception) {
-                Log.e(TAG, "Gemini HN summary failed", e); ""
-            }
-            val v2exSummary = try { v2exSummaryDeferred.await() } catch (e: Exception) {
-                Log.e(TAG, "Gemini V2EX summary failed", e); ""
-            }
-            val fourD4ySummary = try { fourD4ySummaryDeferred.await() } catch (e: Exception) {
-                Log.e(TAG, "Gemini 4D4Y summary failed", e); ""
-            }
+            val hnSummary = try { hnSummaryDeferred.await() } catch (e: Exception) { Log.e(TAG, "Gemini HN summary failed", e); "" }
+            val v2exSummary = try { v2exSummaryDeferred.await() } catch (e: Exception) { Log.e(TAG, "Gemini V2EX summary failed", e); "" }
+            val fourD4ySummary = try { fourD4ySummaryDeferred.await() } catch (e: Exception) { Log.e(TAG, "Gemini 4D4Y summary failed", e); "" }
 
             val result = combineSiteSummaries(hnSummary, v2exSummary, fourD4ySummary)
             Log.d(TAG, "Gemini summary generated successfully (${result.length} chars)")
             result
         } catch (e: Exception) {
-            Log.e(TAG, "Gemini generateCoverSummary FAILED: ${e.javaClass.simpleName}: ${e.message}", e)
+            Log.e(TAG, "Gemini generateCoverSummary FAILED", e)
             buildFallbackSummary(hnThreads, v2exThreads, fourD4yThreads)
         }
 
@@ -167,7 +171,6 @@ class CoverRepository @Inject constructor(
         )
         coverSummaryDao.insert(entity)
 
-        // Clean up covers older than 30 days
         val thirtyDaysAgo = now - 30L * 24 * 60 * 60 * 1000
         coverSummaryDao.deleteOlderThan(thirtyDaysAgo)
 
@@ -193,23 +196,24 @@ class CoverRepository @Inject constructor(
         )
     }
 
-    private suspend fun fetchHNPosts(): List<ForumThread> = coroutineScope {
+    private suspend fun fetchHNPosts(): List<ForumThread> = withContext(Dispatchers.IO) {
         val storyIds = hackerNewsApi.getBestStories()
         val cutoff = (System.currentTimeMillis() / 1000) - 86400
 
-        val items = storyIds.take(100).map { id ->
-            async {
-                try {
-                    hackerNewsApi.getItem(id)
-                } catch (e: Exception) {
-                    null
-                }
-            }
-        }.map { it.await() }.filterNotNull()
-
         val community = Community("beststories", "Best", "Best stories", "hackernews")
 
-        items.filter { it.time.toLong() > cutoff }
+        storyIds.take(100).map { id ->
+            async {
+                concurrencyLimit.withPermit {
+                    try {
+                        hackerNewsApi.getItem(id)
+                    } catch (e: Exception) {
+                        null
+                    }
+                }
+            }
+        }.awaitAll().filterNotNull()
+            .filter { it.time.toLong() > cutoff }
             .sortedByDescending { it.descendants ?: 0 }
             .take(10)
             .map { item ->
@@ -217,13 +221,9 @@ class CoverRepository @Inject constructor(
                     id = item.id.toString(),
                     title = item.title ?: "",
                     content = "",
-                    author = com.feedflow.data.model.User(
-                        item.by ?: "unknown",
-                        item.by ?: "unknown",
-                        ""
-                    ),
+                    author = User(item.by ?: "unknown", item.by ?: "unknown", ""),
                     community = community,
-                    timeAgo = com.feedflow.util.TimeUtils.calculateTimeAgo(item.time.toLong()),
+                    timeAgo = TimeUtils.calculateTimeAgo(item.time.toLong()),
                     likeCount = item.score ?: 0,
                     commentCount = item.descendants ?: 0
                 )
@@ -338,7 +338,7 @@ class CoverRepository @Inject constructor(
     suspend fun deleteOlderThanOneWeek(): Int {
         val oneWeekAgo = System.currentTimeMillis() - 7L * 24 * 60 * 60 * 1000
         coverSummaryDao.deleteOlderThan(oneWeekAgo)
-        return 1 // signal success
+        return 1
     }
 
     suspend fun loadSavedCover(entity: CoverSummaryEntity): CoverPageData {

@@ -1,7 +1,6 @@
 package com.feedflow.data.local.encryption
 
 import android.content.Context
-import android.util.Base64
 import androidx.security.crypto.EncryptedSharedPreferences
 import androidx.security.crypto.MasterKey
 import dagger.hilt.android.qualifiers.ApplicationContext
@@ -26,22 +25,6 @@ class EncryptionHelper @Inject constructor(
             EncryptedSharedPreferences.PrefKeyEncryptionScheme.AES256_SIV,
             EncryptedSharedPreferences.PrefValueEncryptionScheme.AES256_GCM
         )
-    }
-
-    fun encrypt(plainText: String): String {
-        // Store in encrypted prefs with a unique key, return base64 encoded
-        val key = "enc_${System.nanoTime()}"
-        encryptedPrefs.edit().putString(key, plainText).apply()
-        // Return the encrypted value as base64
-        return Base64.encodeToString(plainText.toByteArray(Charsets.UTF_8), Base64.NO_WRAP)
-    }
-
-    fun decrypt(cipherText: String): String? {
-        return try {
-            String(Base64.decode(cipherText, Base64.NO_WRAP), Charsets.UTF_8)
-        } catch (e: Exception) {
-            null
-        }
     }
 
     fun saveCredential(key: String, value: String) {
@@ -74,5 +57,6 @@ class EncryptionHelper @Inject constructor(
 
     companion object {
         private const val ENCRYPTED_PREFS_NAME = "feedflow_encrypted_prefs"
+        const val KEY_GEMINI_API_KEY = "gemini_api_key_encrypted"
     }
 }

@@ -7,6 +7,7 @@ import androidx.datastore.preferences.core.booleanPreferencesKey
 import androidx.datastore.preferences.core.edit
 import androidx.datastore.preferences.core.stringPreferencesKey
 import androidx.datastore.preferences.preferencesDataStore
+import com.feedflow.data.local.encryption.EncryptionHelper
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.map
@@ -17,11 +18,11 @@ private val Context.dataStore: DataStore<Preferences> by preferencesDataStore(na
 
 @Singleton
 class PreferencesManager @Inject constructor(
-    @ApplicationContext private val context: Context
+    @ApplicationContext private val context: Context,
+    private val encryptionHelper: EncryptionHelper
 ) {
     private val dataStore = context.dataStore
 
-    // Dark Mode
     val isDarkMode: Flow<Boolean> = dataStore.data.map { preferences ->
         preferences[DARK_MODE_KEY] ?: false
     }
@@ -32,7 +33,6 @@ class PreferencesManager @Inject constructor(
         }
     }
 
-    // Language
     val language: Flow<String> = dataStore.data.map { preferences ->
         preferences[LANGUAGE_KEY] ?: "en"
     }
@@ -43,22 +43,18 @@ class PreferencesManager @Inject constructor(
         }
     }
 
-    // Gemini API Key
-    val geminiApiKey: Flow<String?> = dataStore.data.map { preferences ->
-        preferences[GEMINI_API_KEY]
+    val geminiApiKey: Flow<String?> = dataStore.data.map { 
+        encryptionHelper.getCredential(EncryptionHelper.KEY_GEMINI_API_KEY)
     }
 
     suspend fun setGeminiApiKey(apiKey: String?) {
-        dataStore.edit { preferences ->
-            if (apiKey != null) {
-                preferences[GEMINI_API_KEY] = apiKey
-            } else {
-                preferences.remove(GEMINI_API_KEY)
-            }
+        if (apiKey != null) {
+            encryptionHelper.saveCredential(EncryptionHelper.KEY_GEMINI_API_KEY, apiKey)
+        } else {
+            encryptionHelper.removeCredential(EncryptionHelper.KEY_GEMINI_API_KEY)
         }
     }
 
-    // Custom RSS Feeds (JSON encoded)
     val customRssFeeds: Flow<String?> = dataStore.data.map { preferences ->
         preferences[CUSTOM_RSS_FEEDS_KEY]
     }
@@ -69,7 +65,6 @@ class PreferencesManager @Inject constructor(
         }
     }
 
-    // Downvoted IDs (for Zhihu)
     val downvotedIds: Flow<String?> = dataStore.data.map { preferences ->
         preferences[DOWNVOTED_IDS_KEY]
     }
@@ -80,7 +75,6 @@ class PreferencesManager @Inject constructor(
         }
     }
 
-    // Community Visibility Settings
     val communityVisibility: Flow<String?> = dataStore.data.map { preferences ->
         preferences[COMMUNITY_VISIBILITY_KEY]
     }
@@ -94,7 +88,6 @@ class PreferencesManager @Inject constructor(
     companion object {
         private val DARK_MODE_KEY = booleanPreferencesKey("dark_mode")
         private val LANGUAGE_KEY = stringPreferencesKey("language")
-        private val GEMINI_API_KEY = stringPreferencesKey("gemini_api_key")
         private val CUSTOM_RSS_FEEDS_KEY = stringPreferencesKey("custom_rss_feeds")
         private val DOWNVOTED_IDS_KEY = stringPreferencesKey("downvoted_ids")
         private val COMMUNITY_VISIBILITY_KEY = stringPreferencesKey("community_visibility")
