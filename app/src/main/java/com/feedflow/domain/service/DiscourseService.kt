@@ -60,8 +60,7 @@ class DiscourseService @Inject constructor(
                 community = community,
                 timeAgo = TimeUtils.calculateTimeAgo(topic.createdAt),
                 likeCount = topic.likeCount ?: 0,
-                commentCount = topic.postsCount - 1, // Minus the OP
-                tags = topic.tags
+                commentCount = topic.postsCount - 1 // Minus the OP
             )
         } ?: emptyList()
     }
@@ -106,8 +105,7 @@ class DiscourseService @Inject constructor(
             community = community,
             timeAgo = TimeUtils.calculateTimeAgo(response.createdAt),
             likeCount = response.likeCount ?: 0,
-            commentCount = response.postsCount - 1,
-            tags = response.tags
+            commentCount = response.postsCount - 1
         )
 
         val comments = posts.drop(1).map { post -> postToComment(post) }
