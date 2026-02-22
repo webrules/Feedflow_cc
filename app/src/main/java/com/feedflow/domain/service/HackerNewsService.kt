@@ -115,6 +115,8 @@ class HackerNewsService @Inject constructor(
         return "https://news.ycombinator.com/item?id=${thread.id}"
     }
 
+    override fun requiresLogin(): Boolean = true
+
     private fun itemToThread(item: com.feedflow.data.remote.dto.HNItem, community: Community): ForumThread {
         val author = User(
             id = item.by ?: "unknown",

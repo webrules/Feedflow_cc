@@ -21,6 +21,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.Comment
 import androidx.compose.material.icons.filled.Home
+import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.ThumbUp
 import androidx.compose.material3.Card
@@ -35,6 +36,7 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.derivedStateOf
@@ -44,10 +46,13 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.LocalLifecycleOwner
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleEventObserver
 import coil.compose.AsyncImage
 import com.feedflow.R
 import com.feedflow.data.model.ForumThread
@@ -60,6 +65,8 @@ fun ThreadListScreen(
     onThreadClick: (ForumThread) -> Unit,
     onBackClick: () -> Unit,
     onHomeClick: () -> Unit,
+    onLoginClick: ((String) -> Unit)? = null,
+    onCloudflareChallenge: ((String, String) -> Unit)? = null,
     viewModel: ThreadListViewModel = hiltViewModel()
 ) {
     val threads by viewModel.threads.collectAsState()
@@ -68,8 +75,24 @@ fun ThreadListScreen(
     val canLoadMore by viewModel.canLoadMore.collectAsState()
     val error by viewModel.error.collectAsState()
     val communityName by viewModel.communityName.collectAsState()
+    val isLoggedIn by viewModel.isLoggedIn.collectAsState()
+    val isCloudflareError = error?.contains("403") == true || error?.contains("Cloudflare") == true
 
     val listState = rememberLazyListState()
+
+    // Refresh login status whenever this screen becomes visible
+    val lifecycleOwner = LocalLifecycleOwner.current
+    DisposableEffect(lifecycleOwner) {
+        val observer = LifecycleEventObserver { _, event ->
+            if (event == Lifecycle.Event.ON_RESUME) {
+                viewModel.refreshLoginStatus()
+            }
+        }
+        lifecycleOwner.lifecycle.addObserver(observer)
+        onDispose {
+            lifecycleOwner.lifecycle.removeObserver(observer)
+        }
+    }
 
     LaunchedEffect(siteId, communityId) {
         viewModel.loadThreadsBySiteAndCommunity(siteId, communityId)
@@ -89,6 +112,8 @@ fun ThreadListScreen(
         }
     }
 
+    val showLoginButton = viewModel.requiresLogin() && !isLoggedIn && onLoginClick != null
+
     Scaffold(
         topBar = {
             TopAppBar(
@@ -101,6 +126,11 @@ fun ThreadListScreen(
                     }
                 },
                 actions = {
+                    if (showLoginButton) {
+                        IconButton(onClick = { onLoginClick?.invoke(siteId) }) {
+                            Icon(Icons.Default.Person, contentDescription = stringResource(R.string.login))
+                        }
+                    }
                     IconButton(onClick = { viewModel.refresh() }) {
                         Icon(Icons.Default.Refresh, contentDescription = stringResource(R.string.refresh))
                     }
@@ -125,14 +155,34 @@ fun ThreadListScreen(
                         modifier = Modifier.align(Alignment.Center)
                     )
                 }
-                error != null && threads.isEmpty() -> {
-                    Text(
-                        text = error ?: stringResource(R.string.error_loading),
+                error != null -> {
+                    Column(
                         modifier = Modifier
                             .align(Alignment.Center)
                             .padding(16.dp),
-                        color = MaterialTheme.colorScheme.error
-                    )
+                        horizontalAlignment = Alignment.CenterHorizontally
+                    ) {
+                        Text(
+                            text = error ?: stringResource(R.string.error_loading),
+                            color = MaterialTheme.colorScheme.error
+                        )
+                        if (isCloudflareError && onCloudflareChallenge != null) {
+                            Spacer(modifier = Modifier.height(16.dp))
+                            IconButton(
+                                onClick = { onCloudflareChallenge(siteId, "https://linux.do") }
+                            ) {
+                                Icon(
+                                    Icons.Default.Person,
+                                    contentDescription = "Verify Security"
+                                )
+                            }
+                            Text(
+                                text = "Tap to verify security",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.primary
+                            )
+                        }
+                    }
                 }
                 else -> {
                     LazyColumn(

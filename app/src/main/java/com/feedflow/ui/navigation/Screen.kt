@@ -21,6 +21,10 @@ sealed class Screen(val route: String) {
         fun createRoute(siteId: String, url: String) =
             "login_browser/$siteId/${java.net.URLEncoder.encode(url, "UTF-8")}"
     }
+    object CloudflareChallenge : Screen("cloudflare_challenge/{siteId}/{siteUrl}") {
+        fun createRoute(siteId: String, siteUrl: String) =
+            "cloudflare_challenge/$siteId/${java.net.URLEncoder.encode(siteUrl, "UTF-8")}"
+    }
     object Browser : Screen("browser/{url}") {
         fun createRoute(url: String) = "browser/${java.net.URLEncoder.encode(url, "UTF-8")}"
     }
