@@ -59,6 +59,18 @@ enum class ForumSite(
         baseUrl = "https://2libra.com"
     );
 
+    val loginUrl: String?
+        get() = when (this) {
+            HACKER_NEWS -> "https://news.ycombinator.com/login"
+            V2EX -> "${baseUrl}/signin"
+            LINUX_DO -> "${baseUrl}/login"
+            FOUR_D4Y -> "${baseUrl}/logging.php?action=login"
+            ZHIHU -> "${baseUrl}/signin"
+            NODE_SEEK -> "${baseUrl}/signIn.html"
+            TWO_LIBRA -> "${baseUrl}/auth/login"
+            else -> null
+        }
+
     companion object {
         fun fromId(id: String): ForumSite? = entries.find { it.id == id }
     }

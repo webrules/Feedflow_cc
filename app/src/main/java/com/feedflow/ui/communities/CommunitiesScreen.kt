@@ -3,13 +3,16 @@ package com.feedflow.ui.communities
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -23,14 +26,18 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalLifecycleOwner
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleEventObserver
 import com.feedflow.R
 import com.feedflow.data.model.Community
 import com.feedflow.data.model.ForumSite
@@ -41,17 +48,37 @@ fun CommunitiesScreen(
     siteId: String,
     onCommunityClick: (Community) -> Unit,
     onBackClick: () -> Unit,
+    onLoginClick: ((String) -> Unit)? = null,
+    onCloudflareChallenge: ((String, String) -> Unit)? = null,
     viewModel: CommunitiesViewModel = hiltViewModel()
 ) {
     val communities by viewModel.communities.collectAsState()
     val isLoading by viewModel.isLoading.collectAsState()
     val error by viewModel.error.collectAsState()
+    val isLoggedIn by viewModel.isLoggedIn.collectAsState()
 
     val site = ForumSite.fromId(siteId)
+    val isCloudflareError = error?.contains("403") == true || error?.contains("Cloudflare") == true
+
+    // Refresh login status whenever this screen becomes visible
+    val lifecycleOwner = LocalLifecycleOwner.current
+    DisposableEffect(lifecycleOwner) {
+        val observer = LifecycleEventObserver { _, event ->
+            if (event == Lifecycle.Event.ON_RESUME) {
+                viewModel.refreshLoginStatus()
+            }
+        }
+        lifecycleOwner.lifecycle.addObserver(observer)
+        onDispose {
+            lifecycleOwner.lifecycle.removeObserver(observer)
+        }
+    }
 
     LaunchedEffect(siteId) {
         site?.let { viewModel.loadCommunities(it) }
     }
+
+    val showLoginButton = viewModel.requiresLogin() && !isLoggedIn && onLoginClick != null
 
     Scaffold(
         topBar = {
@@ -65,6 +92,11 @@ fun CommunitiesScreen(
                     }
                 },
                 actions = {
+                    if (showLoginButton) {
+                        IconButton(onClick = { onLoginClick?.invoke(siteId) }) {
+                            Icon(Icons.Default.Person, contentDescription = stringResource(R.string.login))
+                        }
+                    }
                     IconButton(onClick = { viewModel.refresh() }) {
                         Icon(Icons.Default.Refresh, contentDescription = stringResource(R.string.refresh))
                     }
@@ -87,13 +119,33 @@ fun CommunitiesScreen(
                     )
                 }
                 error != null && communities.isEmpty() -> {
-                    Text(
-                        text = error ?: stringResource(R.string.error_loading),
+                    Column(
                         modifier = Modifier
                             .align(Alignment.Center)
                             .padding(16.dp),
-                        color = MaterialTheme.colorScheme.error
-                    )
+                        horizontalAlignment = Alignment.CenterHorizontally
+                    ) {
+                        Text(
+                            text = error ?: stringResource(R.string.error_loading),
+                            color = MaterialTheme.colorScheme.error
+                        )
+                        if (isCloudflareError && onCloudflareChallenge != null && site != null) {
+                            Spacer(modifier = Modifier.height(16.dp))
+                            IconButton(
+                                onClick = { onCloudflareChallenge(siteId, site.baseUrl) }
+                            ) {
+                                Icon(
+                                    Icons.Default.Person,
+                                    contentDescription = "Verify Security"
+                                )
+                            }
+                            Text(
+                                text = "Tap to verify security",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.primary
+                            )
+                        }
+                    }
                 }
                 communities.isEmpty() -> {
                     Text(

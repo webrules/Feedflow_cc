@@ -39,7 +39,6 @@ data class DiscourseTopic(
     @SerializedName("created_at") val createdAt: String,
     @SerializedName("bumped_at") val bumpedAt: String?,
     @SerializedName("category_id") val categoryId: Int?,
-    @SerializedName("tags") val tags: List<String>?,
     @SerializedName("posters") val posters: List<DiscoursePoster>?
 )
 
@@ -57,7 +56,6 @@ data class DiscourseTopicResponse(
     @SerializedName("views") val views: Int,
     @SerializedName("like_count") val likeCount: Int?,
     @SerializedName("category_id") val categoryId: Int?,
-    @SerializedName("tags") val tags: List<String>?,
     @SerializedName("post_stream") val postStream: DiscoursePostStream?,
     @SerializedName("details") val details: DiscourseTopicDetails?
 )

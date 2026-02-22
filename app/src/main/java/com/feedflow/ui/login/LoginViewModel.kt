@@ -77,16 +77,7 @@ class LoginViewModel @Inject constructor(
     }
 
     fun getLoginUrl(site: ForumSite): String {
-        return when (site) {
-            ForumSite.HACKER_NEWS -> "https://news.ycombinator.com/login"
-            ForumSite.V2EX -> "${site.baseUrl}/signin"
-            ForumSite.LINUX_DO -> "${site.baseUrl}/login"
-            ForumSite.FOUR_D4Y -> "${site.baseUrl}/logging.php?action=login"
-            ForumSite.ZHIHU -> "${site.baseUrl}/signin"
-            ForumSite.NODE_SEEK -> "${site.baseUrl}/signIn.html"
-            ForumSite.TWO_LIBRA -> "${site.baseUrl}/auth/login"
-            else -> site.baseUrl
-        }
+        return site.loginUrl ?: site.baseUrl
     }
 
     fun clearError() {

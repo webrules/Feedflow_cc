@@ -7,7 +7,9 @@ import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
 import androidx.navigation.navArgument
+import com.feedflow.data.model.ForumSite
 import com.feedflow.ui.bookmarks.BookmarksScreen
+import com.feedflow.ui.browser.CloudflareChallengeScreen
 import com.feedflow.ui.browser.InAppBrowserScreen
 import com.feedflow.ui.browser.LoginBrowserScreen
 import com.feedflow.ui.communities.CommunitiesScreen
@@ -67,7 +69,17 @@ fun NavGraph(
                 onCommunityClick = { community ->
                     navController.navigate(Screen.ThreadList.createRoute(siteId, community.id))
                 },
-                onBackClick = { navController.popBackStack() }
+                onBackClick = { navController.popBackStack() },
+                onLoginClick = { loginSiteId ->
+                    val site = ForumSite.fromId(loginSiteId)
+                    val loginUrl = site?.loginUrl
+                    if (loginUrl != null) {
+                        navController.navigate(Screen.LoginBrowser.createRoute(loginSiteId, loginUrl))
+                    }
+                },
+                onCloudflareChallenge = { challengeSiteId, siteUrl ->
+                    navController.navigate(Screen.CloudflareChallenge.createRoute(challengeSiteId, siteUrl))
+                }
             )
         }
 
@@ -88,7 +100,17 @@ fun NavGraph(
                     navController.navigate(Screen.ThreadDetail.createRoute(siteId, thread.id))
                 },
                 onBackClick = { navController.popBackStack() },
-                onHomeClick = { navController.popBackStack(Screen.Home.route, false) }
+                onHomeClick = { navController.popBackStack(Screen.Home.route, false) },
+                onLoginClick = { loginSiteId ->
+                    val site = ForumSite.fromId(loginSiteId)
+                    val loginUrl = site?.loginUrl
+                    if (loginUrl != null) {
+                        navController.navigate(Screen.LoginBrowser.createRoute(loginSiteId, loginUrl))
+                    }
+                },
+                onCloudflareChallenge = { challengeSiteId, siteUrl ->
+                    navController.navigate(Screen.CloudflareChallenge.createRoute(challengeSiteId, siteUrl))
+                }
             )
         }
 
@@ -158,10 +180,25 @@ fun NavGraph(
                 siteId = siteId,
                 url = url,
                 onBackClick = { navController.popBackStack() },
-                onLoginSuccess = { loggedInSiteId ->
-                    navController.popBackStack(Screen.Home.route, false)
-                    navController.navigate(Screen.Communities.createRoute(loggedInSiteId))
-                }
+                onLoginSuccess = { navController.popBackStack() }
+            )
+        }
+
+        composable(
+            route = Screen.CloudflareChallenge.route,
+            arguments = listOf(
+                navArgument("siteId") { type = NavType.StringType },
+                navArgument("siteUrl") { type = NavType.StringType }
+            )
+        ) { backStackEntry ->
+            val siteId = backStackEntry.arguments?.getString("siteId") ?: return@composable
+            val encodedUrl = backStackEntry.arguments?.getString("siteUrl") ?: return@composable
+            val siteUrl = URLDecoder.decode(encodedUrl, "UTF-8")
+            CloudflareChallengeScreen(
+                siteId = siteId,
+                siteUrl = siteUrl,
+                onBackClick = { navController.popBackStack() },
+                onChallengeSolved = { navController.popBackStack() }
             )
         }
 

@@ -71,11 +71,19 @@ object NetworkModule {
         // Create a client with cookie injection for Discourse/Linux.do
         val discourseClient = client.newBuilder()
             .addInterceptor { chain ->
+                val original = chain.request()
                 val cookies = encryptionHelper.getCookies("linux_do")
-                val requestBuilder = chain.request().newBuilder()
+                val requestBuilder = original.newBuilder()
+                    // Use a realistic Chrome User-Agent
+                    .header("User-Agent", "Mozilla/5.0 (Linux; Android 14; Pixel 7a) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Mobile Safari/537.36")
+                    .header("Accept", "application/json, text/plain, */*")
+                    .header("Accept-Language", "en-US,en;q=0.9")
+                
+                // Add cookies if available
                 if (!cookies.isNullOrBlank()) {
                     requestBuilder.header("Cookie", cookies)
                 }
+                
                 chain.proceed(requestBuilder.build())
             }
             .build()
