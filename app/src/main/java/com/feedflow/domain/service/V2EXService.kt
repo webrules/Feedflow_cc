@@ -8,7 +8,11 @@ import com.feedflow.data.model.ThreadDetailResult
 import com.feedflow.data.model.User
 import com.feedflow.util.HtmlUtils
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
+import okhttp3.Cookie
+import okhttp3.FormBody
 import okhttp3.OkHttpClient
 import okhttp3.Request
 import org.jsoup.Jsoup
@@ -26,6 +30,7 @@ class V2EXService @Inject constructor(
     override val logo: Int = R.drawable.ic_v2ex
 
     private val baseUrl = "https://v2ex.com"
+    private val cookieMutex = Mutex()
 
     private val categories = listOf(
         Community("tech", "技术", "Technology discussions", id),
@@ -68,14 +73,95 @@ class V2EXService @Inject constructor(
             parseThreadDetail(html, threadId)
         }
 
-    override suspend fun postComment(topicId: String, categoryId: String, content: String) {
-        // TODO: Implement with CSRF token handling
-        throw UnsupportedOperationException("Posting requires authentication and CSRF token")
-    }
+    override suspend fun postComment(topicId: String, categoryId: String, content: String) =
+        withContext(Dispatchers.IO) {
+            // Step 1: Fetch the reply page to get CSRF token
+            val replyUrl = "$baseUrl/t/$topicId"
+            val getRequest = buildRequest(replyUrl).newBuilder()
+                .header("Accept", "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8")
+                .build()
 
-    override suspend fun createThread(categoryId: String, title: String, content: String) {
-        throw UnsupportedOperationException("Thread creation requires authentication")
-    }
+            val getResponse = client.newCall(getRequest).execute()
+            updateCookies(getResponse)
+            val html = getResponse.body?.string() 
+                ?: throw Exception("Failed to load reply page")
+
+            // Extract CSRF token from the page
+            val doc = Jsoup.parse(html)
+            val csrfToken = doc.selectFirst("input[name=once]")?.attr("value")
+                ?: throw Exception("CSRF token not found. Please ensure you're logged in.")
+
+            // Step 2: Submit the reply
+            val formBody = FormBody.Builder()
+                .add("content", content)
+                .add("once", csrfToken)
+                .build()
+
+            val postRequest = buildRequest("$baseUrl/t/$topicId").newBuilder()
+                .header("Content-Type", "application/x-www-form-urlencoded")
+                .header("Referer", "$baseUrl/t/$topicId")
+                .post(formBody)
+                .build()
+
+            val postResponse = client.newCall(postRequest).execute()
+            updateCookies(postResponse)
+
+            if (!postResponse.isSuccessful) {
+                throw Exception("Failed to post comment: HTTP ${postResponse.code}")
+            }
+
+            // Check if we got redirected back to the thread (success) or to an error page
+            val responseBody = postResponse.body?.string() ?: ""
+            if (responseBody.contains("error") || responseBody.contains("错误")) {
+                throw Exception("Failed to post comment. Please check your login status.")
+            }
+        }
+
+    override suspend fun createThread(categoryId: String, title: String, content: String) =
+        withContext(Dispatchers.IO) {
+            // Step 1: Fetch the new topic page to get CSRF token
+            val newTopicUrl = "$baseUrl/new/$categoryId"
+            val getRequest = buildRequest(newTopicUrl).newBuilder()
+                .header("Accept", "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8")
+                .build()
+
+            val getResponse = client.newCall(getRequest).execute()
+            updateCookies(getResponse)
+            val html = getResponse.body?.string()
+                ?: throw Exception("Failed to load new topic page")
+
+            // Extract CSRF token
+            val doc = Jsoup.parse(html)
+            val csrfToken = doc.selectFirst("input[name=once]")?.attr("value")
+                ?: throw Exception("CSRF token not found. Please ensure you're logged in.")
+
+            // Step 2: Submit the new topic
+            val formBody = FormBody.Builder()
+                .add("title", title)
+                .add("content", content)
+                .add("once", csrfToken)
+                .add("syntax", "default")
+                .build()
+
+            val postRequest = buildRequest("$baseUrl/new/$categoryId").newBuilder()
+                .header("Content-Type", "application/x-www-form-urlencoded")
+                .header("Referer", "$baseUrl/new/$categoryId")
+                .post(formBody)
+                .build()
+
+            val postResponse = client.newCall(postRequest).execute()
+            updateCookies(postResponse)
+
+            if (!postResponse.isSuccessful) {
+                throw Exception("Failed to create thread: HTTP ${postResponse.code}")
+            }
+
+            // Check response for success
+            val responseBody = postResponse.body?.string() ?: ""
+            if (responseBody.contains("error") || responseBody.contains("错误")) {
+                throw Exception("Failed to create thread. Please check your login status.")
+            }
+        }
 
     override fun getWebURL(thread: ForumThread): String {
         return "$baseUrl/t/${thread.id}"
@@ -93,6 +179,42 @@ class V2EXService @Inject constructor(
             builder.header("Cookie", cookies)
         }
         return builder.build()
+    }
+
+    private suspend fun updateCookies(response: okhttp3.Response) {
+        val setCookieHeaders = response.headers("Set-Cookie")
+        if (setCookieHeaders.isEmpty()) return
+
+        cookieMutex.withLock {
+            val existingCookiesStr = encryptionHelper.getCookies(id) ?: ""
+            val cookieMap = mutableMapOf<String, String>()
+
+            if (existingCookiesStr.isNotBlank()) {
+                existingCookiesStr.split(";").forEach {
+                    val parts = it.split("=", limit = 2)
+                    if (parts.size == 2) {
+                        cookieMap[parts[0].trim()] = parts[1].trim()
+                    }
+                }
+            }
+
+            val url = response.request.url
+            for (header in setCookieHeaders) {
+                val cookie = Cookie.parse(url, header)
+                if (cookie != null) {
+                    if (cookie.expiresAt < System.currentTimeMillis()) {
+                        cookieMap.remove(cookie.name)
+                    } else {
+                        cookieMap[cookie.name] = cookie.value
+                    }
+                }
+            }
+
+            if (cookieMap.isNotEmpty()) {
+                val newCookieString = cookieMap.entries.joinToString("; ") { "${it.key}=${it.value}" }
+                encryptionHelper.saveCookies(id, newCookieString)
+            }
+        }
     }
 
     private fun parseThreadList(html: String, community: Community): List<ForumThread> {

@@ -16,7 +16,9 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.ArrowBack
+import androidx.compose.material.icons.filled.Home
+import androidx.compose.material.icons.filled.KeyboardArrowDown
+import androidx.compose.material.icons.filled.KeyboardArrowUp
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
@@ -35,6 +37,9 @@ import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
@@ -53,7 +58,7 @@ import java.util.Locale
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun CoverScreen(
-    onBackClick: () -> Unit,
+    onHomeClick: () -> Unit,
     onThreadClick: (String, String) -> Unit,
     viewModel: CoverViewModel = hiltViewModel(),
     settingsViewModel: SettingsViewModel = hiltViewModel()
@@ -69,9 +74,9 @@ fun CoverScreen(
                     containerColor = MaterialTheme.colorScheme.background
                 ),
                 navigationIcon = {
-                    IconButton(onClick = onBackClick) {
+                    IconButton(onClick = onHomeClick) {
                         Icon(
-                            Icons.Default.ArrowBack,
+                            Icons.Default.Home,
                             contentDescription = stringResource(R.string.home)
                         )
                     }
@@ -191,10 +196,11 @@ private fun CoverContent(
             if (summary.isNotBlank()) {
                 item { SiteSummaryCard(summary) }
             }
-            items(data.hnThreads) { thread ->
-                ThreadRow(
-                    thread = thread,
-                    onClick = { onThreadClick("hackernews", thread.id) }
+            item {
+                CollapsibleThreadList(
+                    threads = data.hnThreads,
+                    siteId = "hackernews",
+                    onThreadClick = onThreadClick
                 )
             }
         }
@@ -206,10 +212,11 @@ private fun CoverContent(
             if (summary.isNotBlank()) {
                 item { SiteSummaryCard(summary) }
             }
-            items(data.v2exThreads) { thread ->
-                ThreadRow(
-                    thread = thread,
-                    onClick = { onThreadClick("v2ex", thread.id) }
+            item {
+                CollapsibleThreadList(
+                    threads = data.v2exThreads,
+                    siteId = "v2ex",
+                    onThreadClick = onThreadClick
                 )
             }
         }
@@ -221,15 +228,56 @@ private fun CoverContent(
             if (summary.isNotBlank()) {
                 item { SiteSummaryCard(summary) }
             }
-            items(data.fourD4yThreads) { thread ->
-                ThreadRow(
-                    thread = thread,
-                    onClick = { onThreadClick("4d4y", thread.id) }
+            item {
+                CollapsibleThreadList(
+                    threads = data.fourD4yThreads,
+                    siteId = "4d4y",
+                    onThreadClick = onThreadClick
                 )
             }
         }
 
         item { Spacer(modifier = Modifier.height(16.dp)) }
+    }
+}
+
+@Composable
+private fun CollapsibleThreadList(
+    threads: List<ForumThread>,
+    siteId: String,
+    onThreadClick: (String, String) -> Unit
+) {
+    var expanded by remember { mutableStateOf(false) }
+
+    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .clickable { expanded = !expanded }
+                .padding(vertical = 8.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Text(
+                text = "${threads.size} posts",
+                style = MaterialTheme.typography.labelLarge,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.weight(1f)
+            )
+            Icon(
+                imageVector = if (expanded) Icons.Default.KeyboardArrowUp else Icons.Default.KeyboardArrowDown,
+                contentDescription = if (expanded) "Collapse" else "Expand",
+                tint = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+        }
+
+        if (expanded) {
+            threads.forEach { thread ->
+                ThreadRow(
+                    thread = thread,
+                    onClick = { onThreadClick(siteId, thread.id) }
+                )
+            }
+        }
     }
 }
 

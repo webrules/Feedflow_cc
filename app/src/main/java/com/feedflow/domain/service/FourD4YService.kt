@@ -87,7 +87,9 @@ class FourD4YService @Inject constructor(
 
     override suspend fun postComment(topicId: String, categoryId: String, content: String) =
         withContext(Dispatchers.IO) {
-            val hash = formHash ?: throw Exception("Form hash not found. Please refresh the thread.")
+            val hash = formHash ?: throw Exception("无法发布回复：您尚未登录4D4Y。请先通过浏览器登录。")
+
+            android.util.Log.d("4D4Y", "Posting comment to thread $topicId with formhash: $hash")
 
             val url = "$baseUrl/post.php?action=reply&fid=$categoryId&tid=$topicId&replysubmit=yes&inajax=1"
 
@@ -100,13 +102,32 @@ class FourD4YService @Inject constructor(
 
             val request = buildRequest(url).newBuilder()
                 .header("Content-Type", "application/x-www-form-urlencoded")
+                .header("Referer", "$baseUrl/viewthread.php?tid=$topicId")
                 .post(formBody)
                 .build()
 
             val response = client.newCall(request).execute()
             updateCookies(response)
+
+            val responseBody = response.body?.string() ?: ""
+            android.util.Log.d("4D4Y", "Post response code: ${response.code}, body length: ${responseBody.length}")
+            android.util.Log.d("4D4Y", "Post response body: ${responseBody.take(500)}")
+
             if (!response.isSuccessful) {
-                throw Exception("Failed to post comment: ${response.code}")
+                throw Exception("Failed to post comment: HTTP ${response.code}")
+            }
+
+            // Check response body for error messages
+            if (responseBody.contains("error") || responseBody.contains("失败") || 
+                responseBody.contains("permission") || responseBody.contains("denied") ||
+                responseBody.contains("login") || responseBody.contains("登录")) {
+                throw Exception("Failed to post comment: ${responseBody.take(200)}")
+            }
+
+            // Check if response indicates success (Discuz usually returns a success message or redirect)
+            if (!responseBody.contains("success") && !responseBody.contains("成功") && 
+                !responseBody.contains("message") && responseBody.isNotBlank()) {
+                android.util.Log.w("4D4Y", "Unexpected response when posting: $responseBody")
             }
         }
 
@@ -216,9 +237,41 @@ class FourD4YService @Inject constructor(
     }
 
     private fun extractFormHash(html: String) {
-        FORM_HASH_REGEX.find(html)?.let {
-            formHash = it.groupValues[1]
+        // Check if user is logged in - look for login indicators
+        if (html.contains("您还没有登录") || html.contains("您无权") || 
+            html.contains("请先登录") || html.contains("not logged in") ||
+            html.contains("login") || html.contains("登录")) {
+            android.util.Log.w("4D4Y", "User not logged in - cannot extract formhash")
+            formHash = null
+            return
         }
+
+        // Try multiple patterns to find formhash
+        val patterns = listOf(
+            FORM_HASH_REGEX,
+            FORM_HASH_INPUT_REGEX,
+            FORM_HASH_VAR_REGEX,
+            FORM_HASH_VALUE_REGEX
+        )
+
+        for (pattern in patterns) {
+            pattern.find(html)?.let {
+                formHash = it.groupValues[1]
+                android.util.Log.d("4D4Y", "Extracted formhash using ${pattern.pattern.take(30)}...: ${formHash?.take(8)}...")
+                return
+            }
+        }
+
+        // Log more context to debug - look for formhash in the HTML
+        val formhashContext = html.let {
+            val idx = it.indexOf("formhash", ignoreCase = true)
+            if (idx >= 0) {
+                it.substring(maxOf(0, idx - 50), minOf(it.length, idx + 100))
+            } else {
+                it.take(800)
+            }
+        }.replace("\n", " ").replace("\r", " ")
+        android.util.Log.w("4D4Y", "Failed to extract formhash. Context: $formhashContext")
     }
 
     private fun parseCategories(html: String): List<Community> {
@@ -500,8 +553,11 @@ class FourD4YService @Inject constructor(
     companion object {
         private const val USER_AGENT = "Mozilla/5.0 (Linux; Android 14) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Mobile Safari/537.36"
 
-        // Regex Patterns
+        // Regex Patterns - formhash can appear in various formats
         private val FORM_HASH_REGEX = Regex("""formhash=([a-zA-Z0-9]+)""")
+        private val FORM_HASH_INPUT_REGEX = Regex("""<input[^>]*name=["']formhash["'][^>]*value=["']([a-zA-Z0-9]+)["']""", RegexOption.IGNORE_CASE)
+        private val FORM_HASH_VAR_REGEX = Regex("""formhash\s*=\s*["']([a-zA-Z0-9]+)["']""")
+        private val FORM_HASH_VALUE_REGEX = Regex("""value=["']([a-zA-Z0-9]{8,})["'][^>]*name=["']formhash["']""", RegexOption.IGNORE_CASE)
 
         private val ATTACH_REGEX = Regex("""<div class="t_attach".*?</div>""", setOf(RegexOption.DOT_MATCHES_ALL, RegexOption.IGNORE_CASE))
         private val IGNORE_JS_OP_REGEX = Regex("""<ignore_js_op>.*?</ignore_js_op>""", setOf(RegexOption.DOT_MATCHES_ALL, RegexOption.IGNORE_CASE))

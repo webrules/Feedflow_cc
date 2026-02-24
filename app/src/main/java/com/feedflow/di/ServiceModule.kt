@@ -38,10 +38,18 @@ object ServiceModule {
 
     @Provides
     @Singleton
+    fun provideHackerNewsServiceConcrete(
+        api: HackerNewsApi,
+        client: OkHttpClient,
+        encryptionHelper: EncryptionHelper
+    ): HackerNewsService = HackerNewsService(api, client, encryptionHelper)
+
+    @Provides
+    @Singleton
     @Named("HackerNews")
-    fun provideHackerNewsService(
-        api: HackerNewsApi
-    ): ForumService = HackerNewsService(api)
+    fun provideHackerNewsForumService(
+        service: HackerNewsService
+    ): ForumService = service
 
     @Provides
     @Singleton

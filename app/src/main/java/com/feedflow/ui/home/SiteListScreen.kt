@@ -14,7 +14,7 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.AutoAwesome
+import androidx.compose.material.icons.filled.ArrowBack
 import androidx.compose.material.icons.filled.Bookmark
 import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.filled.Settings
@@ -49,7 +49,7 @@ fun SiteListScreen(
     onSettingsClick: () -> Unit,
     onBookmarksClick: () -> Unit,
     onLoginClick: () -> Unit,
-    onCoverClick: () -> Unit,
+    onBackClick: () -> Unit,
     settingsViewModel: SettingsViewModel = hiltViewModel(),
     siteListViewModel: SiteListViewModel = hiltViewModel()
 ) {
@@ -64,13 +64,15 @@ fun SiteListScreen(
                 colors = TopAppBarDefaults.topAppBarColors(
                     containerColor = MaterialTheme.colorScheme.background
                 ),
-                actions = {
-                    IconButton(onClick = onCoverClick) {
+                navigationIcon = {
+                    IconButton(onClick = onBackClick) {
                         Icon(
-                            Icons.Default.AutoAwesome,
-                            contentDescription = stringResource(R.string.ai_summary_toggle)
+                            Icons.Default.ArrowBack,
+                            contentDescription = stringResource(R.string.home)
                         )
                     }
+                },
+                actions = {
                     IconButton(onClick = onBookmarksClick) {
                         Icon(
                             Icons.Default.Bookmark,

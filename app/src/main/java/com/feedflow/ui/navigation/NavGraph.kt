@@ -28,8 +28,19 @@ fun NavGraph(
 ) {
     NavHost(
         navController = navController,
-        startDestination = Screen.Home.route
+        startDestination = Screen.Cover.route
     ) {
+        composable(Screen.Cover.route) {
+            CoverScreen(
+                onHomeClick = {
+                    navController.navigate(Screen.Home.route)
+                },
+                onThreadClick = { siteId, threadId ->
+                    navController.navigate(Screen.ThreadDetail.createRoute(siteId, threadId))
+                }
+            )
+        }
+
         composable(Screen.Home.route) {
             SiteListScreen(
                 onSiteClick = { site ->
@@ -44,17 +55,8 @@ fun NavGraph(
                 onLoginClick = {
                     navController.navigate(Screen.Login.route)
                 },
-                onCoverClick = {
-                    navController.navigate(Screen.Cover.route)
-                }
-            )
-        }
-
-        composable(Screen.Cover.route) {
-            CoverScreen(
-                onBackClick = { navController.popBackStack() },
-                onThreadClick = { siteId, threadId ->
-                    navController.navigate(Screen.ThreadDetail.createRoute(siteId, threadId))
+                onBackClick = {
+                    navController.popBackStack()
                 }
             )
         }
