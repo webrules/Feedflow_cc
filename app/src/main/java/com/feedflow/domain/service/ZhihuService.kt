@@ -12,7 +12,11 @@ import com.feedflow.util.TimeUtils
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.withContext
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import kotlinx.serialization.json.Json
+import java.util.Collections
+import org.jsoup.Jsoup
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.contentOrNull
 import kotlinx.serialization.json.int
@@ -38,9 +42,15 @@ class ZhihuService @Inject constructor(
 
     private val baseUrl = "https://www.zhihu.com"
     private val json = Json { ignoreUnknownKeys = true }
-    private val downvotedIds = mutableSetOf<String>()
-    // Cache question data from hot list for detail view fallback when API returns 403
-    private val questionDataCache = mutableMapOf<String, Pair<String, String>>()
+    private val downvotedIds = Collections.synchronizedSet(mutableSetOf<String>())
+    private val questionDataCache = Collections.synchronizedMap(
+        object : LinkedHashMap<String, Pair<String, String>>(100, 0.75f, true) {
+            override fun removeEldestEntry(eldest: MutableMap.MutableEntry<String, Pair<String, String>>?): Boolean {
+                return size > 100
+            }
+        }
+    )
+    private val stateMutex = Mutex()
 
     private val categories = listOf(
         Community("recommend", "Recommend", "Recommended content", id),
@@ -107,11 +117,11 @@ class ZhihuService @Inject constructor(
                     parseDetailResponse(responseBody, threadId, type)
                 } catch (e: Exception) {
                     android.util.Log.e("Zhihu", "Error parsing detail response", e)
-                    buildFallbackDetail(threadId, type, actualId)
+                    scrapeThreadFromWeb(threadId, type, actualId)
                 }
             } else {
-                android.util.Log.d("Zhihu", "fetchThreadDetail: API returned ${response.code}, using fallback")
-                buildFallbackDetail(threadId, type, actualId)
+                android.util.Log.d("Zhihu", "fetchThreadDetail: API returned ${response.code}, using web scraping fallback")
+                scrapeThreadFromWeb(threadId, type, actualId)
             }
 
             // Fetch comments/answers
@@ -426,6 +436,95 @@ class ZhihuService @Inject constructor(
             comments = emptyList(),
             totalPages = null
         )
+    }
+
+    private fun scrapeThreadFromWeb(threadId: String, type: String, actualId: String): ThreadDetailResult {
+        val webUrl = when (type) {
+            "article" -> "$baseUrl/p/$actualId"
+            "question" -> "$baseUrl/question/$actualId"
+            "answer" -> "$baseUrl/answer/$actualId"
+            else -> "$baseUrl/answer/$actualId"
+        }
+
+        return try {
+            val request = Request.Builder()
+                .url(webUrl)
+                .headers(buildHeaders())
+                .build()
+
+            val response = client.newCall(request).execute()
+            val html = response.body?.string() ?: return buildFallbackDetail(threadId, type, actualId)
+
+            android.util.Log.d("Zhihu", "scrapeThreadFromWeb: fetched ${html.length} chars from $webUrl")
+
+            val doc = Jsoup.parse(html)
+
+            val title = doc.selectFirst("h1.QuestionHeader-title, .Post-Title, .ContentItem-title")?.text()?.trim() ?: ""
+            val content = doc.selectFirst(".RichContent-inner, .RichText, .Post-RichText")?.let {
+                HtmlUtils.cleanHtml(it.html())
+            } ?: ""
+
+            val authorName = doc.selectFirst(".AuthorInfo-name, .UserLink-link")?.text()?.trim() ?: "Anonymous"
+            val authorAvatar = doc.selectFirst(".AuthorInfo-avatarImage img, .Avatar")?.attr("src") ?: ""
+
+            val voteCount = doc.selectFirst(".VoteButton--up")?.text()?.let {
+                Regex("\\d+").find(it)?.value?.toIntOrNull() ?: 0
+            } ?: 0
+
+            val commentCount = doc.selectFirst(".ContentItem-actions button:contains(评论)")?.text()?.let {
+                Regex("\\d+").find(it)?.value?.toIntOrNull() ?: 0
+            } ?: 0
+
+            val community = Community("zhihu", "Zhihu", "", id)
+            val thread = ForumThread(
+                id = threadId,
+                title = title.ifEmpty { "知乎内容" },
+                content = content,
+                author = User(authorName, authorName, authorAvatar),
+                community = community,
+                timeAgo = "",
+                likeCount = voteCount,
+                commentCount = commentCount,
+                tags = listOf(type)
+            )
+
+            val comments = mutableListOf<Comment>()
+            doc.select(".ContentItem:has(.RichContent), .List-item").forEach { item ->
+                try {
+                    val commentContent = item.selectFirst(".RichContent-inner, .RichText")?.let {
+                        HtmlUtils.cleanHtml(it.html())
+                    } ?: return@forEach
+                    if (commentContent.isBlank()) return@forEach
+
+                    val commentAuthor = item.selectFirst(".AuthorInfo-name, .UserLink-link")?.text()?.trim() ?: "Anonymous"
+                    val commentAvatar = item.selectFirst(".AuthorInfo-avatarImage img, .Avatar")?.attr("src") ?: ""
+                    val commentId = item.attr("data-zop-feedlist")?.let {
+                        Regex("\"id\":\"(\\d+)\"").find(it)?.groupValues?.getOrNull(1)
+                    } ?: comments.size.toString()
+
+                    comments.add(
+                        Comment(
+                            id = commentId,
+                            author = User(commentAuthor, commentAuthor, commentAvatar),
+                            content = commentContent,
+                            timeAgo = "",
+                            likeCount = 0
+                        )
+                    )
+                } catch (e: Exception) {
+                    // Skip malformed comments
+                }
+            }
+
+            ThreadDetailResult(
+                thread = thread,
+                comments = comments,
+                totalPages = null
+            )
+        } catch (e: Exception) {
+            android.util.Log.e("Zhihu", "scrapeThreadFromWeb failed", e)
+            buildFallbackDetail(threadId, type, actualId)
+        }
     }
 
     private fun fetchComments(type: String, id: String, page: Int): List<Comment> {

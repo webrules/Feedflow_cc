@@ -79,20 +79,22 @@ fun ThreadDetailScreen(
     onImageClick: (String) -> Unit,
     viewModel: ThreadDetailViewModel = hiltViewModel()
 ) {
-    val thread by viewModel.thread.collectAsState()
-    val comments by viewModel.comments.collectAsState()
-    val isLoading by viewModel.isLoading.collectAsState()
-    val isFresh by viewModel.isFresh.collectAsState()
-    val isBookmarked by viewModel.isBookmarked.collectAsState()
-    val replyingTo by viewModel.replyingTo.collectAsState()
-    val error by viewModel.error.collectAsState()
-    val isLoadingMore by viewModel.isLoadingMore.collectAsState()
+    val state by viewModel.state.collectAsState()
 
     var replyText by remember { mutableStateOf("") }
 
     LaunchedEffect(siteId, threadId) {
         viewModel.loadThread(threadId, siteId)
     }
+
+    val thread = (state as? ThreadDetailState.Loaded)?.thread
+    val comments = (state as? ThreadDetailState.Loaded)?.comments ?: emptyList()
+    val isLoading = state is ThreadDetailState.Loading
+    val isLoadingMore = (state as? ThreadDetailState.Loaded)?.isLoadingMore ?: false
+    val isFresh = (state as? ThreadDetailState.Loaded)?.isFresh ?: false
+    val isBookmarked = (state as? ThreadDetailState.Loaded)?.isBookmarked ?: false
+    val replyingTo = (state as? ThreadDetailState.Loaded)?.replyingTo
+    val error = (state as? ThreadDetailState.Error)?.message
 
     Scaffold(
         topBar = {
