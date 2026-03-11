@@ -16,6 +16,8 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.itemsIndexed
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardActions
@@ -39,12 +41,15 @@ import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
+import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
@@ -82,6 +87,7 @@ fun ThreadDetailScreen(
     val state by viewModel.state.collectAsState()
 
     var replyText by remember { mutableStateOf("") }
+    var showSummarySheet by remember { mutableStateOf(false) }
 
     LaunchedEffect(siteId, threadId) {
         viewModel.loadThread(threadId, siteId)
@@ -95,6 +101,95 @@ fun ThreadDetailScreen(
     val isBookmarked = (state as? ThreadDetailState.Loaded)?.isBookmarked ?: false
     val replyingTo = (state as? ThreadDetailState.Loaded)?.replyingTo
     val error = (state as? ThreadDetailState.Error)?.message
+    val summary = (state as? ThreadDetailState.Loaded)?.summary
+    val isSummaryLoading = (state as? ThreadDetailState.Loaded)?.isSummaryLoading ?: false
+    val isSummaryCached = (state as? ThreadDetailState.Loaded)?.isSummaryCached ?: false
+
+    if (showSummarySheet) {
+        ModalBottomSheet(
+            onDismissRequest = { showSummarySheet = false },
+            sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
+        ) {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .verticalScroll(rememberScrollState())
+                    .padding(horizontal = 24.dp, vertical = 16.dp)
+            ) {
+                // Title row
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Text(
+                        text = stringResource(R.string.gemini_summary),
+                        style = MaterialTheme.typography.titleLarge
+                    )
+                    if (isSummaryCached) {
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Surface(
+                            shape = RoundedCornerShape(4.dp),
+                            color = MaterialTheme.colorScheme.secondaryContainer
+                        ) {
+                            Text(
+                                text = stringResource(R.string.cached),
+                                style = MaterialTheme.typography.labelSmall,
+                                modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
+                            )
+                        }
+                    }
+                }
+
+                Spacer(modifier = Modifier.height(16.dp))
+
+                // Content
+                if (isSummaryLoading) {
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        modifier = Modifier.padding(vertical = 24.dp)
+                    ) {
+                        CircularProgressIndicator(modifier = Modifier.size(24.dp), strokeWidth = 2.dp)
+                        Spacer(modifier = Modifier.width(12.dp))
+                        Text(
+                            text = stringResource(R.string.gemini_analyzing),
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                } else if (summary != null) {
+                    Text(
+                        text = summary,
+                        style = MaterialTheme.typography.bodyLarge,
+                        lineHeight = 24.sp
+                    )
+                }
+
+                Spacer(modifier = Modifier.height(16.dp))
+
+                // Footer
+                if (!isSummaryLoading && summary != null) {
+                    HorizontalDivider()
+                    Spacer(modifier = Modifier.height(8.dp))
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Text(
+                            text = stringResource(R.string.generated_by),
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                        TextButton(onClick = { viewModel.generateSummary(forceRefresh = true) }) {
+                            Text(stringResource(R.string.regenerate))
+                        }
+                    }
+                }
+
+                Spacer(modifier = Modifier.height(16.dp))
+            }
+        }
+    }
 
     Scaffold(
         topBar = {
@@ -127,7 +222,10 @@ fun ThreadDetailScreen(
                             contentDescription = stringResource(R.string.bookmarks)
                         )
                     }
-                    IconButton(onClick = { viewModel.generateSummary() }) {
+                    IconButton(onClick = {
+                        viewModel.generateSummary()
+                        showSummarySheet = true
+                    }) {
                         Icon(
                             Icons.Default.AutoAwesome,
                             contentDescription = stringResource(R.string.ai_assistant)

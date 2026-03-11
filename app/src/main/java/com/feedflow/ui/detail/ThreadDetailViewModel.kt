@@ -155,96 +155,18 @@ class ThreadDetailViewModel @Inject constructor(
                 val service = currentService ?: throw Exception("Service not found")
                 val categoryId = currentState.thread.community.id
 
-                android.util.Log.d("ThreadDetail", "Sending reply to thread ${thread.id} in category $categoryId")
-
                 // Format content with quote if replying
-                val formattedContent = _replyingTo.value?.let { reply ->
-                    "[quote][b]${reply.author.username}:[/b]${reply.content.take(100)}...[/quote]\n$content"
-                } ?: content
-
-                android.util.Log.d("ThreadDetail", "Posting comment with content length: ${formattedContent.length}")
-                service.postComment(thread.id, categoryId, formattedContent)
-                android.util.Log.d("ThreadDetail", "Comment posted successfully")
-
-                // Clear reply target
-                _replyingTo.value = null
-
-                // Refresh to show new comment - go to last page to see the new reply
-                refreshThreadAfterReply(thread.id, service.id)
-            } catch (e: Exception) {
-                android.util.Log.e("ThreadDetail", "Failed to post reply", e)
-                _error.value = e.message ?: "Failed to post reply"
                 val formattedContent = currentState.replyingTo?.let { reply ->
                     "[quote][b]${reply.author.username}:[/b]${reply.content.take(100)}...[/quote]\n$content"
                 } ?: content
 
                 service.postComment(currentState.thread.id, categoryId, formattedContent)
+
+                // Clear reply target and refresh
                 _state.value = currentState.copy(replyingTo = null)
                 loadThread(currentState.thread.id, service.id)
             } catch (e: Exception) {
                 _state.value = ThreadDetailState.Error(e.message ?: "Failed to post reply")
-            }
-        }
-    }
-
-    private fun refreshThreadAfterReply(threadId: String, @Suppress("UNUSED_PARAMETER") serviceId: String) {
-        viewModelScope.launch {
-            _isLoading.value = true
-            _error.value = null
-
-            try {
-                val service = currentService ?: return@launch
-
-                // First, reload page 1 to get updated thread info and total pages
-                val firstPageResult = service.fetchThreadDetail(threadId, 1)
-                _thread.value = firstPageResult.thread
-
-                // Calculate which page the new reply is likely on (last page)
-                val lastPage = firstPageResult.totalPages ?: 1
-                currentPage = lastPage
-
-                // If it's a single page thread, just use the first page comments
-                if (lastPage <= 1) {
-                    _comments.value = firstPageResult.comments
-                    totalPages = 1
-                } else {
-                    // Load the last page where the new reply should be
-                    val lastPageResult = service.fetchThreadDetail(threadId, lastPage)
-
-                    // Combine all comments: all pages from 1 to lastPage
-                    val allComments = mutableListOf<Comment>()
-
-                    // Add comments from page 1 (if not the last page)
-                    if (lastPage > 1) {
-                        allComments.addAll(firstPageResult.comments)
-
-                        // Load intermediate pages if needed (for threads with many pages, 
-                        // we might not want to load all of them, but for now let's load all)
-                        for (page in 2 until lastPage) {
-                            try {
-                                val pageResult = service.fetchThreadDetail(threadId, page)
-                                allComments.addAll(pageResult.comments)
-                            } catch (e: Exception) {
-                                // Continue even if one page fails
-                            }
-                        }
-                    }
-
-                    // Add comments from the last page (which includes the new reply)
-                    allComments.addAll(lastPageResult.comments)
-
-                    _comments.value = allComments
-                    totalPages = lastPage
-                }
-
-                _isFresh.value = true
-
-                // Save to cache
-                cacheRepository.saveCachedThread(threadId, _thread.value!!, _comments.value)
-            } catch (e: Exception) {
-                _error.value = e.message ?: "Failed to refresh thread after reply"
-            } finally {
-                _isLoading.value = false
             }
         }
     }
