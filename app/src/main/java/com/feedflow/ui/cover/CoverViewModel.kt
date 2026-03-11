@@ -3,12 +3,14 @@ package com.feedflow.ui.cover
 import android.util.Log
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.feedflow.data.local.preferences.PreferencesManager
 import com.feedflow.data.repository.CoverPageData
 import com.feedflow.data.repository.CoverRepository
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import javax.inject.Inject
 
@@ -22,7 +24,8 @@ sealed class CoverUiState {
 
 @HiltViewModel
 class CoverViewModel @Inject constructor(
-    private val coverRepository: CoverRepository
+    private val coverRepository: CoverRepository,
+    private val preferencesManager: PreferencesManager
 ) : ViewModel() {
 
     private val _uiState = MutableStateFlow<CoverUiState>(CoverUiState.Loading)
@@ -59,13 +62,14 @@ class CoverViewModel @Inject constructor(
 
     private fun refreshInBackground(cachedData: CoverPageData) {
         val ageMs = System.currentTimeMillis() - cachedData.createdAt
-        val eightHoursMs = 8 * 60 * 60 * 1000L
-        if (ageMs < eightHoursMs) {
-            Log.d(TAG, "Cache is ${ageMs / 1000}s old (< 8h), skipping background refresh")
-            return
-        }
         viewModelScope.launch {
             try {
+                val refreshHours = preferencesManager.aiSummaryRefreshHours.first()
+                val thresholdMs = refreshHours * 60 * 60 * 1000L
+                if (ageMs < thresholdMs) {
+                    Log.d(TAG, "Cache is ${ageMs / 1000}s old (< ${refreshHours}h), skipping background refresh")
+                    return@launch
+                }
                 val freshData = coverRepository.generateFreshCover()
                 _uiState.value = CoverUiState.Success(freshData)
             } catch (e: Exception) {

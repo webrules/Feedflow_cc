@@ -27,7 +27,9 @@ class SettingsViewModel @Inject constructor(
             ForumSite.FOUR_D4Y,
             ForumSite.V2EX,
             ForumSite.LINUX_DO,
-            ForumSite.ZHIHU
+            ForumSite.ZHIHU,
+            ForumSite.NODE_SEEK,
+            ForumSite.TWO_LIBRA
         )
         private val ALL_OPTIONAL_IDS = OPTIONAL_SITES.map { it.id }.toSet()
     }
@@ -40,6 +42,9 @@ class SettingsViewModel @Inject constructor(
 
     val geminiApiKey: StateFlow<String?> = preferencesManager.geminiApiKey
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), null)
+
+    val aiSummaryRefreshHours: StateFlow<Int> = preferencesManager.aiSummaryRefreshHours
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), 8)
 
     val enabledSites: StateFlow<Set<String>> = preferencesManager.communityVisibility
         .map { csv ->
@@ -108,6 +113,12 @@ class SettingsViewModel @Inject constructor(
     fun setGeminiApiKey(apiKey: String?) {
         viewModelScope.launch {
             preferencesManager.setGeminiApiKey(apiKey)
+        }
+    }
+
+    fun setAiSummaryRefreshHours(hours: Int) {
+        viewModelScope.launch {
+            preferencesManager.setAiSummaryRefreshHours(hours)
         }
     }
 }

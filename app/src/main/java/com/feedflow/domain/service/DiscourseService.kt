@@ -122,13 +122,21 @@ class DiscourseService @Inject constructor(
     }
 
     override suspend fun postComment(topicId: String, categoryId: String, content: String) {
-        // TODO: Implement posting with proper authentication
-        throw UnsupportedOperationException("Posting requires authentication")
+        try {
+            val topicIdInt = topicId.toIntOrNull() 
+                ?: throw IllegalArgumentException("Invalid topic ID: $topicId")
+            api.createPost(topicIdInt, content)
+        } catch (e: Exception) {
+            throw Exception("Failed to post comment: ${e.message}")
+        }
     }
 
     override suspend fun createThread(categoryId: String, title: String, content: String) {
-        // TODO: Implement thread creation with proper authentication
-        throw UnsupportedOperationException("Thread creation requires authentication")
+        try {
+            api.createTopic(title, content, categoryId)
+        } catch (e: Exception) {
+            throw Exception("Failed to create thread: ${e.message}")
+        }
     }
 
     override fun getWebURL(thread: ForumThread): String {

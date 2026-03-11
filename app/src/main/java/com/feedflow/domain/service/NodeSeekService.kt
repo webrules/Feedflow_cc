@@ -8,7 +8,11 @@ import com.feedflow.data.model.ThreadDetailResult
 import com.feedflow.data.model.User
 import com.feedflow.util.HtmlUtils
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
+import okhttp3.Cookie
+import okhttp3.FormBody
 import okhttp3.OkHttpClient
 import okhttp3.Request
 import org.jsoup.Jsoup
@@ -26,6 +30,7 @@ class NodeSeekService @Inject constructor(
     override val logo: Int = R.drawable.ic_nodeseek
 
     private val baseUrl = "https://www.nodeseek.com"
+    private val cookieMutex = Mutex()
 
     private val categories = listOf(
         Community("tech", "技术", "Technology discussions", id),
@@ -70,19 +75,108 @@ class NodeSeekService @Inject constructor(
             parseThreadDetail(html, threadId)
         }
 
-    override suspend fun postComment(topicId: String, categoryId: String, content: String) {
-        throw UnsupportedOperationException("Posting is not supported on NodeSeek")
-    }
+    override suspend fun postComment(topicId: String, categoryId: String, content: String) =
+        withContext(Dispatchers.IO) {
+            // Step 1: Fetch the post page to get CSRF token
+            val postUrl = "$baseUrl/post-$topicId-1"
+            val getRequest = buildRequest(postUrl).newBuilder()
+                .header("Accept", "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8")
+                .build()
 
-    override suspend fun createThread(categoryId: String, title: String, content: String) {
-        throw UnsupportedOperationException("Thread creation is not supported on NodeSeek")
-    }
+            val getResponse = client.newCall(getRequest).execute()
+            updateCookies(getResponse)
+            val html = getResponse.body?.string()
+                ?: throw Exception("Failed to load post page")
+
+            // Extract CSRF token from the page
+            val doc = Jsoup.parse(html)
+            val csrfToken = doc.selectFirst("input[name=csrf_token], input[name=_token], meta[name=csrf-token]")
+                ?.attr("value")
+                ?: doc.selectFirst("meta[name=csrf-token]")?.attr("content")
+                ?: throw Exception("CSRF token not found. Please ensure you're logged in.")
+
+            // Step 2: Submit the reply
+            val formBody = FormBody.Builder()
+                .add("content", content)
+                .add("csrf_token", csrfToken)
+                .add("post_id", topicId)
+                .build()
+
+            val postRequest = buildRequest("$baseUrl/api/post/reply").newBuilder()
+                .header("Content-Type", "application/x-www-form-urlencoded")
+                .header("Referer", postUrl)
+                .header("X-Requested-With", "XMLHttpRequest")
+                .post(formBody)
+                .build()
+
+            val postResponse = client.newCall(postRequest).execute()
+            updateCookies(postResponse)
+
+            if (!postResponse.isSuccessful) {
+                throw Exception("Failed to post comment: HTTP ${postResponse.code}")
+            }
+
+            // Check response for success
+            val responseBody = postResponse.body?.string() ?: ""
+            if (responseBody.contains("error") || responseBody.contains("失败") || responseBody.contains("false")) {
+                throw Exception("Failed to post comment. Please check your login status.")
+            }
+        }
+
+    override suspend fun createThread(categoryId: String, title: String, content: String) =
+        withContext(Dispatchers.IO) {
+            // Step 1: Fetch the new post page to get CSRF token
+            val newPostUrl = "$baseUrl/categories/$categoryId/new"
+            val getRequest = buildRequest(newPostUrl).newBuilder()
+                .header("Accept", "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8")
+                .build()
+
+            val getResponse = client.newCall(getRequest).execute()
+            updateCookies(getResponse)
+            val html = getResponse.body?.string()
+                ?: throw Exception("Failed to load new post page")
+
+            // Extract CSRF token
+            val doc = Jsoup.parse(html)
+            val csrfToken = doc.selectFirst("input[name=csrf_token], input[name=_token], meta[name=csrf-token]")
+                ?.attr("value")
+                ?: doc.selectFirst("meta[name=csrf-token]")?.attr("content")
+                ?: throw Exception("CSRF token not found. Please ensure you're logged in.")
+
+            // Step 2: Submit the new post
+            val formBody = FormBody.Builder()
+                .add("title", title)
+                .add("content", content)
+                .add("csrf_token", csrfToken)
+                .add("category_id", categoryId)
+                .build()
+
+            val postRequest = buildRequest("$baseUrl/api/post/create").newBuilder()
+                .header("Content-Type", "application/x-www-form-urlencoded")
+                .header("Referer", newPostUrl)
+                .header("X-Requested-With", "XMLHttpRequest")
+                .post(formBody)
+                .build()
+
+            val postResponse = client.newCall(postRequest).execute()
+            updateCookies(postResponse)
+
+            if (!postResponse.isSuccessful) {
+                throw Exception("Failed to create thread: HTTP ${postResponse.code}")
+            }
+
+            // Check response
+            val responseBody = postResponse.body?.string() ?: ""
+            if (responseBody.contains("error") || responseBody.contains("失败") || responseBody.contains("false")) {
+                throw Exception("Failed to create thread. Please check your login status.")
+            }
+        }
 
     override fun getWebURL(thread: ForumThread): String {
         return "$baseUrl/post-${thread.id}-1"
     }
 
-    override fun supportsPosting(): Boolean = false
+    override fun supportsPosting(): Boolean = true
     override fun requiresLogin(): Boolean = true
 
     private fun buildRequest(url: String): Request {
@@ -95,6 +189,42 @@ class NodeSeekService @Inject constructor(
             builder.header("Cookie", cookies)
         }
         return builder.build()
+    }
+
+    private suspend fun updateCookies(response: okhttp3.Response) {
+        val setCookieHeaders = response.headers("Set-Cookie")
+        if (setCookieHeaders.isEmpty()) return
+
+        cookieMutex.withLock {
+            val existingCookiesStr = encryptionHelper.getCookies(id) ?: ""
+            val cookieMap = mutableMapOf<String, String>()
+
+            if (existingCookiesStr.isNotBlank()) {
+                existingCookiesStr.split(";").forEach {
+                    val parts = it.split("=", limit = 2)
+                    if (parts.size == 2) {
+                        cookieMap[parts[0].trim()] = parts[1].trim()
+                    }
+                }
+            }
+
+            val url = response.request.url
+            for (header in setCookieHeaders) {
+                val cookie = Cookie.parse(url, header)
+                if (cookie != null) {
+                    if (cookie.expiresAt < System.currentTimeMillis()) {
+                        cookieMap.remove(cookie.name)
+                    } else {
+                        cookieMap[cookie.name] = cookie.value
+                    }
+                }
+            }
+
+            if (cookieMap.isNotEmpty()) {
+                val newCookieString = cookieMap.entries.joinToString("; ") { "${it.key}=${it.value}" }
+                encryptionHelper.saveCookies(id, newCookieString)
+            }
+        }
     }
 
     private fun parseThreadList(html: String, community: Community): List<ForumThread> {

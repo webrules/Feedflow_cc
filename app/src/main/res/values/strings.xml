@@ -159,6 +159,12 @@
     <string name="cover_page_title">AI Summary</string>
     <string name="browse_forums">Browse Forums</string>
 
+    <!-- AI Summary Schedule -->
+    <string name="ai_summary_schedule">AI Summary Schedule</string>
+    <string name="ai_summary_refresh_interval">Refresh interval</string>
+    <string name="ai_summary_schedule_note">How often to refresh AI summaries in the background</string>
+    <string name="hours_format">%d hours</string>
+
     <!-- Cache -->
     <string name="cache_section">Cache</string>
     <string name="clear_cache">Clear Old Cache</string>

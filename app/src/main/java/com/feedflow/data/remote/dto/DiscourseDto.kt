@@ -87,3 +87,10 @@ data class DiscourseUser(
     @SerializedName("username") val username: String,
     @SerializedName("avatar_template") val avatarTemplate: String?
 )
+
+data class DiscoursePostResponse(
+    @SerializedName("id") val id: Int,
+    @SerializedName("topic_id") val topicId: Int,
+    @SerializedName("post_number") val postNumber: Int,
+    @SerializedName("username") val username: String?
+)

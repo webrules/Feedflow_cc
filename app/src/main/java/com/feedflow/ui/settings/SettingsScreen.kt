@@ -1,6 +1,7 @@
 package com.feedflow.ui.settings
 
 import androidx.compose.foundation.Image
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -11,6 +12,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
@@ -18,6 +20,7 @@ import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.FilterChip
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
@@ -53,6 +56,7 @@ fun SettingsScreen(
     val language by viewModel.language.collectAsState()
     val geminiApiKey by viewModel.geminiApiKey.collectAsState()
     val enabledSites by viewModel.enabledSites.collectAsState()
+    val aiSummaryRefreshHours by viewModel.aiSummaryRefreshHours.collectAsState()
     val cacheClearResult by viewModel.cacheClearResult.collectAsState()
 
     var apiKeyInput by remember(geminiApiKey) { mutableStateOf(geminiApiKey ?: "") }
@@ -182,6 +186,37 @@ fun SettingsScreen(
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant
             )
+
+            Spacer(modifier = Modifier.height(24.dp))
+
+            // AI Summary Schedule
+            Text(
+                text = stringResource(R.string.ai_summary_schedule),
+                style = MaterialTheme.typography.titleMedium
+            )
+
+            Spacer(modifier = Modifier.height(8.dp))
+
+            Text(
+                text = stringResource(R.string.ai_summary_schedule_note),
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+
+            Spacer(modifier = Modifier.height(8.dp))
+
+            Row(
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                listOf(4, 8, 12, 24).forEach { hours ->
+                    FilterChip(
+                        selected = aiSummaryRefreshHours == hours,
+                        onClick = { viewModel.setAiSummaryRefreshHours(hours) },
+                        label = { Text(stringResource(R.string.hours_format, hours)) },
+                        shape = RoundedCornerShape(8.dp)
+                    )
+                }
+            }
 
             Spacer(modifier = Modifier.height(24.dp))
 

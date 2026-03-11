@@ -5,6 +5,7 @@ import androidx.datastore.core.DataStore
 import androidx.datastore.preferences.core.Preferences
 import androidx.datastore.preferences.core.booleanPreferencesKey
 import androidx.datastore.preferences.core.edit
+import androidx.datastore.preferences.core.intPreferencesKey
 import androidx.datastore.preferences.core.stringPreferencesKey
 import androidx.datastore.preferences.preferencesDataStore
 import com.feedflow.data.local.encryption.EncryptionHelper
@@ -85,11 +86,23 @@ class PreferencesManager @Inject constructor(
         }
     }
 
+    // AI Summary Refresh Interval (in hours)
+    val aiSummaryRefreshHours: Flow<Int> = dataStore.data.map { preferences ->
+        preferences[AI_SUMMARY_REFRESH_HOURS_KEY] ?: 8
+    }
+
+    suspend fun setAiSummaryRefreshHours(hours: Int) {
+        dataStore.edit { preferences ->
+            preferences[AI_SUMMARY_REFRESH_HOURS_KEY] = hours
+        }
+    }
+
     companion object {
         private val DARK_MODE_KEY = booleanPreferencesKey("dark_mode")
         private val LANGUAGE_KEY = stringPreferencesKey("language")
         private val CUSTOM_RSS_FEEDS_KEY = stringPreferencesKey("custom_rss_feeds")
         private val DOWNVOTED_IDS_KEY = stringPreferencesKey("downvoted_ids")
         private val COMMUNITY_VISIBILITY_KEY = stringPreferencesKey("community_visibility")
+        private val AI_SUMMARY_REFRESH_HOURS_KEY = intPreferencesKey("ai_summary_refresh_hours")
     }
 }
